@@ -1,0 +1,27 @@
+name: Refresh smart-money data
+on:
+  schedule:
+    - cron: "*/30 * * * *"
+  workflow_dispatch: {}
+permissions:
+  contents: write
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python engine.py --top 50
+      - name: Commit if changed
+        run: |
+          git config user.name  "data-bot"
+          git config user.email "data-bot@users.noreply.github.com"
+          if ! git diff --quiet -- data.json; then
+            git add data.json
+            git commit -m "chore: refresh data.json [skip ci]"
+            git push
+          else
+            echo "No change in data.json."
+          fi
