@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hyperliquid Smart-Money Consensus</title>
+<style>
+  :root{
+    --bg:#0a0e14; --panel:#121821; --panel2:#0e131b; --line:#1e2733;
+    --text:#e6edf3; --muted:#7d8896; --accent:#3fb6a8;
+    --long:#26a69a; --short:#ef5350; --split:#b08900;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);
+       font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+  header{padding:22px 26px;border-bottom:1px solid var(--line);
+         display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:14px}
+  h1{font-size:19px;margin:0;letter-spacing:.3px}
+  h1 span{color:var(--accent)}
+  .meta{color:var(--muted);font-size:12px}
+  .wrap{padding:22px 26px;max-width:1180px;margin:0 auto}
+  .controls{display:flex;gap:22px;flex-wrap:wrap;align-items:flex-end;margin-bottom:18px}
+  .ctl label{display:block;color:var(--muted);font-size:11px;text-transform:uppercase;
+             letter-spacing:.6px;margin-bottom:6px}
+  .seg{display:inline-flex;background:var(--panel2);border:1px solid var(--line);border-radius:8px;overflow:hidden}
+  .seg button{background:transparent;border:0;color:var(--muted);padding:8px 14px;cursor:pointer;font-size:13px}
+  .seg button.active{background:var(--accent);color:#06221f;font-weight:600}
+  .seg button:not(.active):hover{color:var(--text)}
+  .refresh{margin-left:auto;display:flex;gap:10px;align-items:center}
+  .btn{background:var(--accent);color:#06221f;border:0;border-radius:8px;padding:9px 16px;
+       font-weight:600;cursor:pointer;font-size:13px}
+  .btn:disabled{opacity:.5;cursor:wait}
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:20px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 16px}
+  .card .k{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.5px}
+  .card .v{font-size:22px;font-weight:600;margin-top:4px}
+  table{width:100%;border-collapse:collapse;background:var(--panel);border:1px solid var(--line);
+        border-radius:10px;overflow:hidden}
+  th,td{padding:11px 14px;text-align:right;border-bottom:1px solid var(--line);white-space:nowrap}
+  th{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.5px;
+     cursor:pointer;user-select:none;background:var(--panel2)}
+  th:first-child,td:first-child{text-align:left}
+  tr:last-child td{border-bottom:0}
+  tbody tr.main{cursor:pointer}
+  tbody tr.main:hover{background:#161d27}
+  .coin{font-weight:600}
+  .pill{display:inline-block;padding:2px 9px;border-radius:20px;font-size:11px;font-weight:600}
+  .pill.long{background:rgba(38,166,154,.16);color:var(--long)}
+  .pill.short{background:rgba(239,83,80,.16);color:var(--short)}
+  .pill.split{background:rgba(176,137,0,.18);color:var(--split)}
+  .bar{display:inline-flex;height:7px;width:84px;border-radius:4px;overflow:hidden;vertical-align:middle;background:#222}
+  .bar i{display:block;height:100%}
+  .pos{color:var(--long)} .neg{color:var(--short)}
+  .detail td{background:var(--panel2);padding:0}
+  .detail table{border:0;border-radius:0;background:transparent}
+  .detail th,.detail td{font-size:12px;padding:7px 14px}
+  .addr{font-family:ui-monospace,monospace;font-size:12px}
+  .addr a{color:var(--accent);text-decoration:none}
+  .hint{color:var(--muted);font-size:12px;margin:14px 0 0}
+  .spin{display:inline-block;width:13px;height:13px;border:2px solid var(--muted);
+        border-top-color:transparent;border-radius:50%;animation:s .7s linear infinite;vertical-align:-2px}
+  @keyframes s{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+<nav style="display:flex;gap:20px;align-items:center;padding:12px 26px;border-bottom:1px solid var(--line);background:var(--panel2);font-size:14px">
+  <a href="index.html" style="color:var(--accent);font-weight:700;text-decoration:none;letter-spacing:.3px">◆ CryptoHub</a>
+  <a href="index.html" style="color:var(--muted);text-decoration:none">Prices</a>
+  <a href="cards.html" style="color:var(--muted);text-decoration:none">Cards</a>
+  <a href="exchanges.html" style="color:var(--muted);text-decoration:none">Exchanges</a>
+  <a href="hyperliquid.html" style="color:var(--text);text-decoration:none;font-weight:600">Smart-Money Tracker</a>
+</nav>
+<header>
+  <h1>Hyperliquid <span>Smart-Money</span> Consensus</h1>
+  <div class="meta" id="meta">loading…</div>
+</header>
+
+<div class="wrap">
+  <div class="controls">
+    <div class="ctl">
+      <label>Rank traders by</label>
+      <div class="seg" id="metric">
+        <button data-v="pnl" class="active">PnL</button>
+        <button data-v="roi">ROI %</button>
+      </div>
+    </div>
+    <div class="ctl">
+      <label>Time window</label>
+      <div class="seg" id="window">
+        <button data-v="day">Day</button>
+        <button data-v="week">Week</button>
+        <button data-v="month">Month</button>
+        <button data-v="allTime" class="active">All-time</button>
+      </div>
+    </div>
+    <div class="refresh">
+      <span class="meta" id="refmeta"></span>
+      <div class="seg" id="source" title="Cached = read the server-refreshed file (light). Live = pull the API from your browser.">
+        <button data-v="cached" class="active">Cached</button>
+        <button data-v="live">Live</button>
+      </div>
+      <label class="meta" style="display:flex;align-items:center;gap:6px;cursor:pointer">
+        <input type="checkbox" id="autoChk" checked> Auto
+      </label>
+      <select id="interval" class="seg" style="padding:7px 10px;color:var(--text);background:var(--panel2);border:1px solid var(--line);border-radius:8px">
+        <option value="30">30s</option>
+        <option value="60" selected>60s</option>
+        <option value="120">2m</option>
+        <option value="300">5m</option>
+      </select>
+      <button class="btn" id="refreshBtn">Refresh now</button>
+    </div>
+  </div>
+
+  <div class="cards" id="cards"></div>
+
+  <table id="tbl">
+    <thead>
+      <tr>
+        <th data-s="coin">Coin</th>
+        <th data-s="holders"># Holding</th>
+        <th data-s="split">Long / Short</th>
+        <th data-s="consensus">Consensus</th>
+        <th data-s="avgEntry">Avg Entry</th>
+        <th data-s="totalNotional">Total Notional</th>
+        <th data-s="netUnrealizedPnl">Net uPnL</th>
+      </tr>
+    </thead>
+    <tbody id="body"></tbody>
+  </table>
+  <p class="hint">Click any row to see the individual traders behind it. "Refresh live" re-pulls every trader's current positions directly from the Hyperliquid API and re-computes the consensus in your browser.</p>
+</div>
+
+<script>
+const INFO_URL="https://api.hyperliquid.xyz/info";
+let DATA=null, state={metric:"pnl",window:"allTime",sort:"holders",dir:-1,open:new Set(),source:"cached"};
+
+const fmtUsd=n=>{const a=Math.abs(n);
+  if(a>=1e9)return (n/1e9).toFixed(2)+"B";
+  if(a>=1e6)return (n/1e6).toFixed(2)+"M";
+  if(a>=1e3)return (n/1e3).toFixed(1)+"K";
+  return n.toFixed(0);};
+const fmtPx=n=>n>=1000?n.toLocaleString(undefined,{maximumFractionDigits:1}):
+              n>=1?n.toFixed(3):n.toPrecision(4);
+const short=a=>a.slice(0,6)+"…"+a.slice(-4);
+
+async function reloadCached(){
+  const rm=document.getElementById("refmeta");
+  try{
+    DATA=await (await fetch("data.json?_="+Date.now())).json();
+    document.getElementById("meta").textContent=
+      `Top ${DATA.topN} traders · server snapshot ${new Date(DATA.generatedAt).toLocaleString()}`;
+    rm.textContent="cached ✓";
+    render();
+  }catch(e){ rm.textContent="data.json not reachable"; }
+}
+
+// run one refresh according to the selected source
+function tick(){ state.source==="live" ? refreshLive() : reloadCached(); }
+
+async function load(){
+  await reloadCached();   // show the server file immediately
+  scheduleAuto();         // then keep refreshing on the chosen interval
+}
+
+function cohortKey(){return state.metric+"_"+state.window;}
+
+function render(){
+  const rows=(DATA.consensus[cohortKey()]||[]).slice();
+  rows.sort((a,b)=>{
+    let x=a[state.sort],y=b[state.sort];
+    if(state.sort==="split"){x=a.longs-a.shorts;y=b.longs-b.shorts;}
+    if(typeof x==="string")return state.dir*x.localeCompare(y);
+    return state.dir*((x||0)-(y||0));
+  });
+
+  // summary cards
+  const totalNotional=rows.reduce((s,r)=>s+r.totalNotional,0);
+  const netPnl=rows.reduce((s,r)=>s+r.netUnrealizedPnl,0);
+  const topCoin=rows.slice().sort((a,b)=>b.holders-a.holders)[0];
+  document.getElementById("cards").innerHTML=[
+    ["Coins held in common",rows.length],
+    ["Combined notional","$"+fmtUsd(totalNotional)],
+    ["Net unrealized PnL",`<span class="${netPnl>=0?'pos':'neg'}">$${fmtUsd(netPnl)}</span>`],
+    ["Most crowded",topCoin?`${topCoin.coin} <span class="meta">(${topCoin.holders})</span>`:"–"],
+  ].map(([k,v])=>`<div class="card"><div class="k">${k}</div><div class="v">${v}</div></div>`).join("");
+
+  const body=document.getElementById("body");
+  body.innerHTML="";
+  for(const r of rows){
+    const tot=r.longs+r.shorts;
+    const lp=tot?Math.round(100*r.longs/tot):0;
+    const tr=document.createElement("tr");
+    tr.className="main";
+    tr.innerHTML=`
+      <td class="coin">${r.coin}</td>
+      <td>${r.holders}</td>
+      <td><span class="bar"><i class="pos" style="width:${lp}%;background:var(--long)"></i><i style="width:${100-lp}%;background:var(--short)"></i></span>
+          <span class="meta"> ${r.longs}/${r.shorts}</span></td>
+      <td><span class="pill ${r.consensus}">${r.consensus}</span></td>
+      <td>$${fmtPx(r.avgEntry)}</td>
+      <td>$${fmtUsd(r.totalNotional)}</td>
+      <td class="${r.netUnrealizedPnl>=0?'pos':'neg'}">$${fmtUsd(r.netUnrealizedPnl)}</td>`;
+    tr.onclick=()=>{state.open.has(r.coin)?state.open.delete(r.coin):state.open.add(r.coin);render();};
+    body.appendChild(tr);
+    if(state.open.has(r.coin)){
+      const d=document.createElement("tr");d.className="detail";
+      d.innerHTML=`<td colspan="7"><table><thead><tr>
+        <th>Trader</th><th>Side</th><th>Entry</th><th>Size</th><th>Notional</th><th>Lev</th></tr></thead><tbody>
+        ${r.traders.map(t=>`<tr>
+          <td class="addr"><a href="https://hypurrscan.io/address/${t.address}" target="_blank">${short(t.address)}</a></td>
+          <td><span class="pill ${t.side}">${t.side}</span></td>
+          <td>$${fmtPx(t.entryPx)}</td>
+          <td>${Math.abs(t.szi).toLocaleString(undefined,{maximumFractionDigits:4})}</td>
+          <td>$${fmtUsd(t.notional)}</td>
+          <td>${t.leverage??"–"}x</td></tr>`).join("")}
+        </tbody></table></td>`;
+      body.appendChild(d);
+    }
+  }
+}
+
+// ---- live client-side refresh: re-pull positions + re-aggregate ----
+async function postInfo(addr){
+  try{
+    const r=await fetch(INFO_URL,{method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({type:"clearinghouseState",user:addr})});
+    return await r.json();
+  }catch(e){return null;}
+}
+function aggregate(addresses,posByAddr){
+  const coins={};
+  for(const addr of addresses){
+    const rec=posByAddr[addr];if(!rec)continue;
+    for(const p of rec){
+      const c=coins[p.coin]||(coins[p.coin]={coin:p.coin,holders:0,longs:0,shorts:0,
+        _sz:0,_en:0,totalNotional:0,netUnrealizedPnl:0,traders:[]});
+      c.holders++; p.szi>0?c.longs++:c.shorts++;
+      const a=Math.abs(p.szi); c._sz+=a; c._en+=a*p.entryPx;
+      c.totalNotional+=p.positionValue; c.netUnrealizedPnl+=p.unrealizedPnl;
+      c.traders.push({address:addr,side:p.szi>0?"long":"short",entryPx:p.entryPx,
+        szi:p.szi,notional:p.positionValue,leverage:p.leverage});
+    }
+  }
+  return Object.values(coins).map(c=>({
+    coin:c.coin,holders:c.holders,longs:c.longs,shorts:c.shorts,
+    consensus:c.longs>c.shorts?"long":(c.shorts>c.longs?"short":"split"),
+    avgEntry:c._sz?c._en/c._sz:0,
+    totalNotional:c.totalNotional,netUnrealizedPnl:c.netUnrealizedPnl,
+    traders:c.traders.sort((a,b)=>Math.abs(b.notional)-Math.abs(a.notional)),
+  })).sort((a,b)=>b.holders-a.holders);
+}
+let refreshing=false;
+async function refreshLive(){
+  if(refreshing)return;            // don't overlap with an auto tick
+  refreshing=true;
+  const btn=document.getElementById("refreshBtn");
+  const rm=document.getElementById("refmeta");
+  btn.disabled=true;
+  // union of all cohort addresses so every tab stays live
+  const all=new Set();
+  for(const k in DATA.cohorts) DATA.cohorts[k].forEach(r=>all.add(r.address));
+  const addrs=[...all]; let done=0;
+  const posByAddr={};
+  const CONC=12;
+  async function worker(q){
+    while(q.length){
+      const a=q.pop(); const d=await postInfo(a);
+      if(d){
+        posByAddr[a]=(d.assetPositions||[]).map(ap=>ap.position)
+          .filter(p=>parseFloat(p.szi)!==0).map(p=>({
+            coin:p.coin,szi:parseFloat(p.szi),entryPx:parseFloat(p.entryPx),
+            positionValue:parseFloat(p.positionValue),unrealizedPnl:parseFloat(p.unrealizedPnl),
+            leverage:(p.leverage||{}).value}));
+      }
+      done++; rm.innerHTML=`<span class="spin"></span> ${done}/${addrs.length}`;
+    }
+  }
+  const queue=addrs.slice();
+  await Promise.all(Array.from({length:CONC},()=>worker(queue)));
+  // recompute every cohort
+  for(const k in DATA.cohorts){
+    DATA.consensus[k]=aggregate(DATA.cohorts[k].map(r=>r.address),posByAddr);
+  }
+  DATA.generatedAt=new Date().toISOString();
+  document.getElementById("meta").textContent=
+    `Top ${DATA.topN} traders · live ${new Date().toLocaleString()}`;
+  rm.textContent="live ✓";
+  btn.disabled=false;
+  refreshing=false;
+  render();
+}
+
+// ---- auto-refresh polling ----
+let autoTimer=null;
+function scheduleAuto(){
+  clearInterval(autoTimer);
+  if(document.getElementById("autoChk").checked){
+    const secs=parseInt(document.getElementById("interval").value,10);
+    autoTimer=setInterval(()=>{if(!document.hidden)tick();},secs*1000);
+  }
+}
+document.getElementById("autoChk").onchange=scheduleAuto;
+document.getElementById("interval").onchange=scheduleAuto;
+document.querySelectorAll("#source button").forEach(b=>b.onclick=()=>{
+  document.querySelectorAll("#source button").forEach(x=>x.classList.remove("active"));
+  b.classList.add("active");state.source=b.dataset.v;tick();});
+
+// wiring
+document.querySelectorAll("#metric button").forEach(b=>b.onclick=()=>{
+  document.querySelectorAll("#metric button").forEach(x=>x.classList.remove("active"));
+  b.classList.add("active");state.metric=b.dataset.v;state.open.clear();render();});
+document.querySelectorAll("#window button").forEach(b=>b.onclick=()=>{
+  document.querySelectorAll("#window button").forEach(x=>x.classList.remove("active"));
+  b.classList.add("active");state.window=b.dataset.v;state.open.clear();render();});
+document.querySelectorAll("th[data-s]").forEach(th=>th.onclick=()=>{
+  const s=th.dataset.s;
+  if(state.sort===s)state.dir*=-1;else{state.sort=s;state.dir=-1;}
+  render();});
+document.getElementById("refreshBtn").onclick=tick;
+
+load();
+</script>
+</body>
+</html>

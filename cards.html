@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CryptoHub — Crypto Card Comparison</title>
+<style>
+  :root{--bg:#0a0e14;--panel:#121821;--panel2:#0e131b;--line:#1e2733;
+        --text:#e6edf3;--muted:#7d8896;--accent:#3fb6a8;--pos:#26a69a;--neg:#ef5350;}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);
+       font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+  a{color:inherit}
+  nav{display:flex;gap:20px;align-items:center;padding:12px 26px;border-bottom:1px solid var(--line);
+      background:var(--panel2);font-size:14px;position:sticky;top:0;z-index:5}
+  nav a{text-decoration:none;color:var(--muted)}
+  nav a.brand{color:var(--accent);font-weight:700}
+  nav a.active{color:var(--text);font-weight:600}
+  nav a:hover{color:var(--text)}
+  .wrap{padding:26px;max-width:1240px;margin:0 auto}
+  h1{font-size:24px;margin:0 0 4px}
+  .sub{color:var(--muted);font-size:13px;margin:0 0 20px}
+  table{width:100%;border-collapse:collapse;background:var(--panel);border:1px solid var(--line);
+        border-radius:12px;overflow:hidden}
+  th,td{padding:12px 14px;text-align:left;border-bottom:1px solid var(--line);vertical-align:top;font-size:13px}
+  th{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.5px;background:var(--panel2);
+     cursor:pointer;user-select:none;white-space:nowrap}
+  th:hover{color:var(--text)}
+  tr:last-child td{border-bottom:0}
+  tbody tr:hover{background:#161d27}
+  .name{font-weight:600;font-size:14px}
+  .net{color:var(--muted);font-size:12px}
+  .big{font-size:15px;font-weight:600;color:var(--accent)}
+  .pill{display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600}
+  .yes{background:rgba(38,166,154,.16);color:var(--pos)}
+  .no{background:rgba(239,83,80,.16);color:var(--neg)}
+  .note{color:var(--muted);font-size:12px;max-width:230px;white-space:normal}
+  .legend{color:var(--muted);font-size:12px;margin-top:16px;line-height:1.7}
+  .legend a{color:var(--accent)}
+</style>
+</head>
+<body>
+<nav>
+  <a href="index.html" class="brand">◆ CryptoHub</a>
+  <a href="index.html">Prices</a>
+  <a href="cards.html" class="active">Cards</a>
+  <a href="exchanges.html">Exchanges</a>
+  <a href="hyperliquid.html">Smart-Money Tracker</a>
+</nav>
+
+<div class="wrap">
+  <h1>Crypto Card Comparison</h1>
+  <p class="sub">Major global crypto cards · figures verified June 2026 · click any column header to sort. Always confirm current terms with the issuer before applying.</p>
+  <table id="tbl">
+    <thead><tr>
+      <th data-k="name" data-t="s">Card</th>
+      <th data-k="cashbackMax" data-t="n">Max Cashback</th>
+      <th data-k="cashbackNote" data-t="s">Reward Conditions</th>
+      <th data-k="annual" data-t="s">Annual Fee</th>
+      <th data-k="fx" data-t="s">FX Fee</th>
+      <th data-k="atm" data-t="s">ATM</th>
+      <th data-k="us" data-t="s">US?</th>
+      <th data-k="regions" data-t="s">Availability</th>
+    </tr></thead>
+    <tbody id="body"></tbody>
+  </table>
+  <div class="legend">
+    <strong>Notes:</strong> "Max cashback" is the top advertised tier and usually requires large token staking/holdings — base tiers are far lower. Crypto-to-fiat conversion spreads (~0.5–0.9%) often apply on top of stated FX fees.<br>
+    Sources:
+    <a href="https://skrumble.com/crypto-cards/crypto-com-visa-review/" target="_blank">Crypto.com</a> ·
+    <a href="https://cryptoslate.com/crypto-cards/coinbase-card-review/" target="_blank">Coinbase</a> ·
+    <a href="https://damadefi.com/binance-card-review-2026-fees-cashback-and-hidden-costs/" target="_blank">Binance</a> ·
+    <a href="https://cryptoslate.com/crypto-cards/bybit-card-review/" target="_blank">Bybit</a> ·
+    <a href="https://cryptoslate.com/crypto-cards/wirex-card-review/" target="_blank">Wirex</a> ·
+    <a href="https://cryptoslate.com/crypto-cards/nexo-card-review/" target="_blank">Nexo</a>
+  </div>
+</div>
+
+<script>
+const CARDS=[
+ {name:"Crypto.com Visa",network:"Visa (prepaid)",cashbackMax:5,
+  cashbackNote:"Tiered by CRO staked ($0–$500k, locked 180 days); rewards cut & re-tied to staking in late 2025",
+  annual:"$0",fx:"0% markup",atm:"Free up to monthly limit, then fee",us:"Yes",
+  regions:"Global — US, UK, EU, APAC"},
+ {name:"Coinbase Card",network:"Visa (debit)",cashbackMax:4,
+  cashbackNote:"Up to 4% in a rotating promoted asset, no staking; rate varies by quarter",
+  annual:"$0",fx:"2.49% (0% if spending USDC)",atm:"$2.50 + operator fee",us:"Yes",
+  regions:"US only"},
+ {name:"Binance Card",network:"Mastercard",cashbackMax:2,
+  cashbackNote:"Up to 2% in BNB (Brazil program; old 8% Visa card discontinued 2023)",
+  annual:"$0",fx:"1–2% + 0.9% crypto conversion",atm:"Varies by region",us:"No",
+  regions:"Brazil, Peru, Colombia only"},
+ {name:"Bybit Card",network:"Mastercard (debit)",cashbackMax:10,
+  cashbackNote:"Points-based 2%→10% by VIP tier; 2% standard, 10% needs Supreme VIP",
+  annual:"$0 (physical $5 once)",fx:"0.5% + 0.9% crypto conversion",atm:"2% above free limit",us:"No",
+  regions:"EEA, Switzerland, Australia, LATAM, parts of APAC"},
+ {name:"Wirex Card",network:"Visa / Mastercard",cashbackMax:8,
+  cashbackNote:"Cryptoback 0.5%→8%; top 'Elite' tiers need large WXT token lockups",
+  annual:"$0",fx:"0% in 35 countries",atm:"Free ~$200/mo, then 2%",us:"No",
+  regions:"130+ countries (not US, Canada, Japan, China)"},
+ {name:"Nexo Card",network:"Mastercard",cashbackMax:2,
+  cashbackNote:"Up to 2% (NEXO/BTC) on CREDIT-mode purchases only; tiered by loyalty/portfolio (>$5k)",
+  annual:"$0",fx:"Applies even in EEA/UK; higher on weekends",atm:"Free up to €2,000/£1,800/mo",us:"No",
+  regions:"EEA + UK only (physical orders paused)"},
+];
+
+let sortK="cashbackMax",sortDir=-1,sortT="n";
+function render(){
+  CARDS.sort((a,b)=>{
+    let x=a[sortK],y=b[sortK];
+    if(sortT==="n")return sortDir*((x||0)-(y||0));
+    return sortDir*String(x).localeCompare(String(y));
+  });
+  document.getElementById("body").innerHTML=CARDS.map(c=>`
+    <tr>
+      <td><div class="name">${c.name}</div><div class="net">${c.network}</div></td>
+      <td><span class="big">${c.cashbackMax}%</span></td>
+      <td class="note">${c.cashbackNote}</td>
+      <td>${c.annual}</td>
+      <td>${c.fx}</td>
+      <td>${c.atm}</td>
+      <td><span class="pill ${c.us==='Yes'?'yes':'no'}">${c.us}</span></td>
+      <td class="note">${c.regions}</td>
+    </tr>`).join("");
+}
+document.querySelectorAll("th[data-k]").forEach(th=>th.onclick=()=>{
+  const k=th.dataset.k;
+  if(sortK===k)sortDir*=-1;else{sortK=k;sortT=th.dataset.t;sortDir=th.dataset.t==="n"?-1:1;}
+  render();
+});
+render();
+</script>
+</body>
+</html>

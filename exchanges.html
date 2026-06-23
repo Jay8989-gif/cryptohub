@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CryptoHub — Exchange Comparison</title>
+<style>
+  :root{--bg:#0a0e14;--panel:#121821;--panel2:#0e131b;--line:#1e2733;
+        --text:#e6edf3;--muted:#7d8896;--accent:#3fb6a8;--pos:#26a69a;--neg:#ef5350;}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);
+       font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+  a{color:inherit}
+  nav{display:flex;gap:20px;align-items:center;padding:12px 26px;border-bottom:1px solid var(--line);
+      background:var(--panel2);font-size:14px;position:sticky;top:0;z-index:5}
+  nav a{text-decoration:none;color:var(--muted)}
+  nav a.brand{color:var(--accent);font-weight:700}
+  nav a.active{color:var(--text);font-weight:600}
+  nav a:hover{color:var(--text)}
+  .wrap{padding:26px;max-width:1240px;margin:0 auto}
+  h1{font-size:24px;margin:0 0 4px}
+  .sub{color:var(--muted);font-size:13px;margin:0 0 20px}
+  table{width:100%;border-collapse:collapse;background:var(--panel);border:1px solid var(--line);
+        border-radius:12px;overflow:hidden}
+  th,td{padding:12px 14px;text-align:left;border-bottom:1px solid var(--line);vertical-align:top;font-size:13px}
+  th{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.5px;background:var(--panel2);
+     cursor:pointer;user-select:none;white-space:nowrap}
+  th:hover{color:var(--text)}
+  th.r,td.r{text-align:right}
+  tr:last-child td{border-bottom:0}
+  tbody tr:hover{background:#161d27}
+  .name{font-weight:600;font-size:14px}
+  .big{font-size:15px;font-weight:600;color:var(--accent)}
+  .pill{display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600}
+  .yes{background:rgba(38,166,154,.16);color:var(--pos)}
+  .no{background:rgba(239,83,80,.16);color:var(--neg)}
+  .note{color:var(--muted);font-size:12px;max-width:240px;white-space:normal}
+  .legend{color:var(--muted);font-size:12px;margin-top:16px;line-height:1.7}
+  .legend a{color:var(--accent)}
+</style>
+</head>
+<body>
+<nav>
+  <a href="index.html" class="brand">◆ CryptoHub</a>
+  <a href="index.html">Prices</a>
+  <a href="cards.html">Cards</a>
+  <a href="exchanges.html" class="active">Exchanges</a>
+  <a href="hyperliquid.html">Smart-Money Tracker</a>
+</nav>
+
+<div class="wrap">
+  <h1>Exchange Comparison</h1>
+  <p class="sub">Top global centralized exchanges · base-tier spot fees verified June 2026 · click any column to sort. Fees drop with 30-day volume and native-token discounts.</p>
+  <table id="tbl">
+    <thead><tr>
+      <th data-k="name" data-t="s">Exchange</th>
+      <th data-k="maker" data-t="n" class="r">Maker (base)</th>
+      <th data-k="taker" data-t="n" class="r">Taker (base)</th>
+      <th data-k="discount" data-t="s">Best-Case Fees</th>
+      <th data-k="coins" data-t="n" class="r"># Coins</th>
+      <th data-k="us" data-t="s">US?</th>
+      <th data-k="notes" data-t="s">Notes</th>
+    </tr></thead>
+    <tbody id="body"></tbody>
+  </table>
+  <div class="legend">
+    <strong>Notes:</strong> Maker/taker shown are standard entry-tier spot rates. Beginner "instant buy" interfaces (e.g. Coinbase Simple, Crypto.com app) carry much higher spreads than the pro/advanced rates listed here.<br>
+    Sources:
+    <a href="https://www.dextools.io/tutorials/binance-vs-coinbase-vs-kraken-best-exchange-comparison-2026" target="_blank">Binance/Coinbase/Kraken</a> ·
+    <a href="https://coinspot.io/en/trading/exchange/okx-vs-bybit/" target="_blank">OKX/Bybit</a> ·
+    <a href="https://www.bitdegree.org/crypto/tutorials/crypto-com-fees" target="_blank">Crypto.com</a>
+  </div>
+</div>
+
+<script>
+const EX=[
+ {name:"Binance",maker:0.10,taker:0.10,discount:"0.075% with BNB; lower by volume",coins:350,us:"No*",
+  notes:"Largest by volume. US users use separate Binance.US (0% maker / 0.02% taker)."},
+ {name:"Coinbase",maker:0.40,taker:0.60,discount:"Drops with 30-day volume on Advanced Trade",coins:250,us:"Yes",
+  notes:"Most beginner-friendly & regulated; base Advanced fees high, Simple Trade higher."},
+ {name:"Kraken",maker:0.16,taker:0.26,discount:"0% maker / 0.10% taker at high volume",coins:200,us:"Yes",
+  notes:"Strong security & compliance record; Kraken Pro for low fees."},
+ {name:"Bybit",maker:0.10,taker:0.10,discount:"Lower by VIP tier",coins:2273,us:"No",
+  notes:"Huge coin selection; derivatives & copy-trading focused."},
+ {name:"OKX",maker:0.08,taker:0.10,discount:"Lower by volume/OKB holdings",coins:400,us:"Partial",
+  notes:"Lowest base maker here; strong Web3 wallet & DEX tools."},
+ {name:"Crypto.com",maker:0.25,taker:0.50,discount:"0% maker / 0.16% taker with CRO stake + volume",coins:400,us:"Yes",
+  notes:"Tied to app & card ecosystem; base exchange fees among the highest."},
+];
+
+let sortK="taker",sortDir=1,sortT="n";
+function fmtPct(n){return n.toFixed(2)+"%";}
+function render(){
+  EX.sort((a,b)=>{
+    let x=a[sortK],y=b[sortK];
+    if(sortT==="n")return sortDir*((x||0)-(y||0));
+    return sortDir*String(x).localeCompare(String(y));
+  });
+  document.getElementById("body").innerHTML=EX.map(e=>`
+    <tr>
+      <td><div class="name">${e.name}</div></td>
+      <td class="r">${fmtPct(e.maker)}</td>
+      <td class="r"><span class="big">${fmtPct(e.taker)}</span></td>
+      <td class="note">${e.discount}</td>
+      <td class="r">${e.coins.toLocaleString()}+</td>
+      <td><span class="pill ${e.us==='Yes'?'yes':(e.us==='No'?'no':'')}" ${e.us!=='Yes'&&e.us!=='No'?'style="background:rgba(176,137,0,.18);color:#d4a017"':''}>${e.us}</span></td>
+      <td class="note">${e.notes}</td>
+    </tr>`).join("");
+}
+document.querySelectorAll("th[data-k]").forEach(th=>th.onclick=()=>{
+  const k=th.dataset.k;
+  if(sortK===k)sortDir*=-1;else{sortK=k;sortT=th.dataset.t;sortDir=th.dataset.t==="n"?1:1;}
+  render();
+});
+render();
+</script>
+</body>
+</html>

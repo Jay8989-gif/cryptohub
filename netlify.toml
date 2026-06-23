@@ -1,0 +1,12 @@
+# Netlify config — the site is plain static HTML, so there is no build step.
+# Netlify just serves the files in the repo root and redeploys on every push.
+
+[build]
+  publish = "."
+  command = ""
+
+# Send visitors who hit the root to the homepage.
+[[redirects]]
+  from = "/"
+  to = "/index.html"
+  status = 200

@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CryptoHub — Prices, Cards, Exchanges & Smart-Money</title>
+<style>
+  :root{
+    --bg:#0a0e14;--panel:#121821;--panel2:#0e131b;--line:#1e2733;
+    --text:#e6edf3;--muted:#7d8896;--accent:#3fb6a8;--pos:#26a69a;--neg:#ef5350;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);
+       font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+  a{color:inherit}
+  nav{display:flex;gap:20px;align-items:center;padding:12px 26px;border-bottom:1px solid var(--line);
+      background:var(--panel2);font-size:14px;position:sticky;top:0;z-index:5}
+  nav a{text-decoration:none;color:var(--muted)}
+  nav a.brand{color:var(--accent);font-weight:700;letter-spacing:.3px}
+  nav a.active{color:var(--text);font-weight:600}
+  nav a:hover{color:var(--text)}
+  .hero{padding:46px 26px 28px;max-width:1180px;margin:0 auto;text-align:center}
+  .hero h1{font-size:34px;margin:0 0 10px;letter-spacing:.3px}
+  .hero h1 span{color:var(--accent)}
+  .hero p{color:var(--muted);font-size:16px;margin:0 auto;max-width:620px}
+  .wrap{padding:0 26px 40px;max-width:1180px;margin:0 auto}
+  .sec-title{display:flex;align-items:baseline;justify-content:space-between;margin:34px 0 14px}
+  .sec-title h2{font-size:18px;margin:0}
+  .sec-title .meta{color:var(--muted);font-size:12px}
+  table{width:100%;border-collapse:collapse;background:var(--panel);border:1px solid var(--line);
+        border-radius:12px;overflow:hidden}
+  th,td{padding:12px 14px;text-align:right;border-bottom:1px solid var(--line);white-space:nowrap}
+  th{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.5px;background:var(--panel2)}
+  th:first-child,td:first-child{text-align:left}
+  tr:last-child td{border-bottom:0}
+  tbody tr:hover{background:#161d27}
+  .coin{display:flex;align-items:center;gap:10px}
+  .coin img{width:24px;height:24px;border-radius:50%}
+  .coin small{color:var(--muted);text-transform:uppercase}
+  .pos{color:var(--pos)} .neg{color:var(--neg)}
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px;margin-top:8px}
+  .ncard{display:block;text-decoration:none;background:var(--panel);border:1px solid var(--line);
+         border-radius:12px;padding:20px;transition:border-color .15s,transform .15s}
+  .ncard:hover{border-color:var(--accent);transform:translateY(-2px)}
+  .ncard h3{margin:0 0 6px;font-size:16px}
+  .ncard p{margin:0;color:var(--muted);font-size:13px}
+  .ncard .go{color:var(--accent);font-size:13px;margin-top:12px;display:inline-block}
+  .spin{display:inline-block;width:13px;height:13px;border:2px solid var(--muted);
+        border-top-color:transparent;border-radius:50%;animation:s .7s linear infinite;vertical-align:-2px}
+  @keyframes s{to{transform:rotate(360deg)}}
+  footer{color:var(--muted);font-size:12px;text-align:center;padding:24px;border-top:1px solid var(--line)}
+</style>
+</head>
+<body>
+<nav>
+  <a href="index.html" class="brand">◆ CryptoHub</a>
+  <a href="index.html" class="active">Prices</a>
+  <a href="cards.html">Cards</a>
+  <a href="exchanges.html">Exchanges</a>
+  <a href="hyperliquid.html">Smart-Money Tracker</a>
+</nav>
+
+<div class="hero">
+  <h1>Your crypto <span>command center</span></h1>
+  <p>Live market prices, side-by-side crypto card and exchange comparisons, and a smart-money tracker that shows what the top Hyperliquid traders are actually holding.</p>
+</div>
+
+<div class="wrap">
+  <div class="sec-title">
+    <h2>Live market prices</h2>
+    <span class="meta" id="priceMeta"><span class="spin"></span> loading…</span>
+  </div>
+  <table>
+    <thead><tr>
+      <th>#</th><th>Coin</th><th>Price</th><th>24h</th><th>Market Cap</th><th>Volume (24h)</th>
+    </tr></thead>
+    <tbody id="priceBody"></tbody>
+  </table>
+
+  <div class="sec-title"><h2>Explore</h2></div>
+  <div class="cards">
+    <a class="ncard" href="cards.html">
+      <h3>💳 Crypto Cards</h3>
+      <p>Compare cashback, fees and regions across the six major global crypto cards — Crypto.com, Coinbase, Binance, Bybit, Wirex and Nexo.</p>
+      <span class="go">Compare cards →</span>
+    </a>
+    <a class="ncard" href="exchanges.html">
+      <h3>🏦 Exchanges</h3>
+      <p>Spot trading fees, coin selection and features for Binance, Coinbase, Kraken, Bybit, OKX and Crypto.com.</p>
+      <span class="go">Compare exchanges →</span>
+    </a>
+    <a class="ncard" href="hyperliquid.html">
+      <h3>📊 Smart-Money Tracker</h3>
+      <p>See which trades the top 50 Hyperliquid traders hold in common, their long/short split and average entry — refreshed automatically.</p>
+      <span class="go">Open tracker →</span>
+    </a>
+  </div>
+</div>
+
+<footer>
+  Data: CoinGecko (prices) · Hyperliquid (positions). For information only — not financial advice.
+</footer>
+
+<script>
+const fmtUsd=n=>{if(n==null)return "–";const a=Math.abs(n);
+  if(a>=1e12)return "$"+(n/1e12).toFixed(2)+"T";
+  if(a>=1e9)return "$"+(n/1e9).toFixed(2)+"B";
+  if(a>=1e6)return "$"+(n/1e6).toFixed(2)+"M";
+  if(a>=1e3)return "$"+(n/1e3).toFixed(1)+"K";
+  return "$"+n.toFixed(2);};
+const fmtPx=n=>n==null?"–":n>=1?"$"+n.toLocaleString(undefined,{maximumFractionDigits:2}):"$"+n.toPrecision(4);
+
+async function loadPrices(){
+  const meta=document.getElementById("priceMeta");
+  try{
+    const url="https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=15&page=1&price_change_percentage=24h";
+    const data=await (await fetch(url)).json();
+    const body=document.getElementById("priceBody");
+    body.innerHTML=data.map((c,i)=>{
+      const ch=c.price_change_percentage_24h;
+      const cls=ch>=0?"pos":"neg";
+      const sign=ch>=0?"+":"";
+      return `<tr>
+        <td>${i+1}</td>
+        <td><div class="coin"><img src="${c.image}" alt=""><span>${c.name} <small>${c.symbol}</small></span></div></td>
+        <td>${fmtPx(c.current_price)}</td>
+        <td class="${cls}">${sign}${ch==null?"–":ch.toFixed(2)+"%"}</td>
+        <td>${fmtUsd(c.market_cap)}</td>
+        <td>${fmtUsd(c.total_volume)}</td>
+      </tr>`;}).join("");
+    meta.textContent="updated "+new Date().toLocaleTimeString();
+  }catch(e){
+    meta.textContent="price feed unavailable (rate limit?) — retrying soon";
+  }
+}
+loadPrices();
+setInterval(()=>{if(!document.hidden)loadPrices();},60000); // refresh every 60s
+</script>
+</body>
+</html>
