@@ -8,11 +8,16 @@ them into "consensus trades": which coins the top traders hold in common,
 the long/short split, the size-weighted average entry price, and total
 notional exposure. Also diffs against the previous snapshot.
 
+Ranking only considers traders whose CURRENT account value is at least
+--min-value (default $10k). This excludes dormant/emptied accounts that
+posted huge historical ROI but hold no positions today, which otherwise
+made the ROI cohorts nearly empty.
+
 Output: data.json  (consumed by the dashboard)
 
 Usage:
-    python engine.py                # default: top 50, all windows/metrics
-    python engine.py --top 100      # change cohort size
+    python engine.py                       # top 50, min $10k account value
+    python engine.py --top 100 --min-value 50000
 """
 
 import argparse
@@ -62,9 +67,10 @@ def fetch_leaderboard():
     return rows
 
 
-def rank(rows, metric, window, top_n):
-    """Return the top_n addresses ranked by metric over window."""
-    ranked = sorted(rows, key=lambda r: perf(r, window, metric), reverse=True)
+def rank(rows, metric, window, top_n, min_value):
+    """Top_n active traders (accountValue >= min_value) ranked by metric/window."""
+    active = [r for r in rows if float(r.get("accountValue", 0) or 0) >= min_value]
+    ranked = sorted(active, key=lambda r: perf(r, window, metric), reverse=True)
     out = []
     for r in ranked[:top_n]:
         out.append({
@@ -201,17 +207,19 @@ def compute_changes(prev_list, new_list):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--top", type=int, default=50, help="cohort size (default 50)")
+    ap.add_argument("--min-value", type=float, default=10000,
+                    help="minimum current account value to be ranked (default 10000)")
     ap.add_argument("--out", default="data.json")
     args = ap.parse_args()
 
     rows = fetch_leaderboard()
 
-    # Build ranked cohorts for every metric/window combo.
+    # Build ranked cohorts for every metric/window combo (active accounts only).
     cohorts = {}
     all_addresses = set()
     for metric in METRICS:
         for window in WINDOWS:
-            ranked = rank(rows, metric, window, args.top)
+            ranked = rank(rows, metric, window, args.top, args.min_value)
             cohorts[f"{metric}_{window}"] = ranked
             all_addresses.update(r["address"] for r in ranked)
 
@@ -240,6 +248,7 @@ def main():
         "generatedAt": datetime.now(timezone.utc).isoformat(),
         "previousAt": prev_at,
         "topN": args.top,
+        "minValue": args.min_value,
         "metrics": METRICS,
         "windows": WINDOWS,
         "cohorts": cohorts,            # ranked trader lists (for live client refresh)
