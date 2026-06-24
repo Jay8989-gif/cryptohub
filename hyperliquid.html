@@ -112,7 +112,21 @@
     </div>
   </div>
 
+  <div id="changes" style="margin:0 0 18px"></div>
+
   <div class="cards" id="cards"></div>
+
+  <div style="display:flex;gap:12px;align-items:center;margin:18px 0 12px;flex-wrap:wrap">
+    <input id="search" placeholder="Filter coin…" autocomplete="off"
+      style="background:var(--panel2);border:1px solid var(--line);border-radius:8px;color:var(--text);padding:8px 12px;font-size:13px;width:150px">
+    <div class="seg" id="sidefilter">
+      <button data-v="all" class="active">All</button>
+      <button data-v="long">Long</button>
+      <button data-v="short">Short</button>
+      <button data-v="split">Split</button>
+    </div>
+    <span class="meta" id="filtermeta"></span>
+  </div>
 
   <table id="tbl">
     <thead>
@@ -133,7 +147,7 @@
 
 <script>
 const INFO_URL="https://api.hyperliquid.xyz/info";
-let DATA=null, state={metric:"pnl",window:"allTime",sort:"holders",dir:-1,open:new Set(),source:"cached"};
+let DATA=null, state={metric:"pnl",window:"allTime",sort:"holders",dir:-1,open:new Set(),source:"cached",q:"",side:"all"};
 
 const fmtUsd=n=>{const a=Math.abs(n);
   if(a>=1e9)return (n/1e9).toFixed(2)+"B";
@@ -165,19 +179,48 @@ async function load(){
 
 function cohortKey(){return state.metric+"_"+state.window;}
 
+function renderChanges(){
+  const el=document.getElementById("changes");
+  const ch=(DATA.changes||{})[cohortKey()];
+  const since=DATA.previousAt?("since "+new Date(DATA.previousAt).toLocaleString()):"(first snapshot)";
+  const chip=(txt,cls)=>`<span class="pill ${cls}" style="margin:2px 5px 2px 0">${txt}</span>`;
+  let html="";
+  if(ch){
+    if(ch.added.length) html+=`<div style="margin-bottom:6px"><span class="meta">🟢 New positions: </span>${ch.added.map(a=>chip(a.coin+" "+a.consensus,a.consensus)).join("")}</div>`;
+    if(ch.dropped.length) html+=`<div style="margin-bottom:6px"><span class="meta">⚪ Closed out: </span>${ch.dropped.map(a=>chip(a.coin,"split")).join("")}</div>`;
+    if(ch.shifts.length) html+=`<div><span class="meta">🔄 Shifts: </span>${ch.shifts.slice(0,14).map(s=>{
+        const up=s.holdersDelta>0; const f=s.flip?` ${s.from}→${s.to}`:"";
+        return chip(`${s.coin} ${up?'▲':'▼'}${Math.abs(s.holdersDelta)}${f}`, s.flip?s.to:'split');
+      }).join("")}</div>`;
+  }
+  if(!html) html=`<span class="meta">No position changes ${since}.</span>`;
+  el.innerHTML=`<div style="background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 16px">
+     <div style="font-weight:600;margin-bottom:8px">What changed <span class="meta" style="font-weight:400">· ${since}</span></div>${html}</div>`;
+}
+
 function render(){
-  const rows=(DATA.consensus[cohortKey()]||[]).slice();
+  renderChanges();
+  const cohort=(DATA.consensus[cohortKey()]||[]);
+
+  // summary cards reflect the whole cohort (not the filtered view)
+  const totalNotional=cohort.reduce((s,r)=>s+r.totalNotional,0);
+  const netPnl=cohort.reduce((s,r)=>s+r.netUnrealizedPnl,0);
+  const topCoin=cohort.slice().sort((a,b)=>b.holders-a.holders)[0];
+
+  // apply filters
+  const q=state.q.trim().toUpperCase();
+  let rows=cohort.filter(r=>
+    (state.side==="all"||r.consensus===state.side) &&
+    (!q||r.coin.toUpperCase().includes(q)));
+  document.getElementById("filtermeta").textContent=
+    `showing ${rows.length} of ${cohort.length} coins`;
+  rows=rows.slice();
   rows.sort((a,b)=>{
     let x=a[state.sort],y=b[state.sort];
     if(state.sort==="split"){x=a.longs-a.shorts;y=b.longs-b.shorts;}
     if(typeof x==="string")return state.dir*x.localeCompare(y);
     return state.dir*((x||0)-(y||0));
   });
-
-  // summary cards
-  const totalNotional=rows.reduce((s,r)=>s+r.totalNotional,0);
-  const netPnl=rows.reduce((s,r)=>s+r.netUnrealizedPnl,0);
-  const topCoin=rows.slice().sort((a,b)=>b.holders-a.holders)[0];
   document.getElementById("cards").innerHTML=[
     ["Coins held in common",rows.length],
     ["Combined notional","$"+fmtUsd(totalNotional)],
@@ -318,6 +361,10 @@ document.querySelectorAll("th[data-s]").forEach(th=>th.onclick=()=>{
   if(state.sort===s)state.dir*=-1;else{state.sort=s;state.dir=-1;}
   render();});
 document.getElementById("refreshBtn").onclick=tick;
+document.getElementById("search").oninput=e=>{state.q=e.target.value;render();};
+document.querySelectorAll("#sidefilter button").forEach(b=>b.onclick=()=>{
+  document.querySelectorAll("#sidefilter button").forEach(x=>x.classList.remove("active"));
+  b.classList.add("active");state.side=b.dataset.v;render();});
 
 load();
 </script>

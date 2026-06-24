@@ -49,6 +49,15 @@
         border-top-color:transparent;border-radius:50%;animation:s .7s linear infinite;vertical-align:-2px}
   @keyframes s{to{transform:rotate(360deg)}}
   footer{color:var(--muted);font-size:12px;text-align:center;padding:24px;border-top:1px solid var(--line)}
+  .movebox{background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+  .mrow{display:flex;align-items:center;gap:9px;padding:9px 13px;border-bottom:1px solid var(--line);font-size:13px}
+  .mrow:last-child{border-bottom:0}
+  .mrow img{width:20px;height:20px;border-radius:50%}
+  .mrow .mn{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .mrow .mn small{color:var(--muted);text-transform:uppercase}
+  .mrow .mp{color:var(--muted)}
+  .sr{background:var(--panel);border:1px solid var(--line);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.4)}
+  .sr .mrow{cursor:default}
 </style>
 </head>
 <body>
@@ -63,6 +72,12 @@
 <div class="hero">
   <h1>Your crypto <span>command center</span></h1>
   <p>Live market prices, side-by-side crypto card and exchange comparisons, and a smart-money tracker that shows what the top Hyperliquid traders are actually holding.</p>
+  <div id="globalBar" style="display:flex;gap:26px;justify-content:center;flex-wrap:wrap;margin-top:22px;color:var(--muted);font-size:13px"></div>
+  <div style="margin-top:20px;position:relative;max-width:420px;margin-left:auto;margin-right:auto">
+    <input id="coinSearch" placeholder="Search any coin (e.g. arbitrum)…" autocomplete="off"
+      style="width:100%;background:var(--panel2);border:1px solid var(--line);border-radius:10px;color:var(--text);padding:11px 14px;font-size:14px">
+    <div id="searchResults" style="position:absolute;left:0;right:0;top:46px;z-index:10"></div>
+  </div>
 </div>
 
 <div class="wrap">
@@ -76,6 +91,21 @@
     </tr></thead>
     <tbody id="priceBody"></tbody>
   </table>
+
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px;margin-top:22px">
+    <div>
+      <div class="sec-title"><h2 style="color:var(--pos)">▲ Top gainers (24h)</h2></div>
+      <div id="gainers" class="movebox"></div>
+    </div>
+    <div>
+      <div class="sec-title"><h2 style="color:var(--neg)">▼ Top losers (24h)</h2></div>
+      <div id="losers" class="movebox"></div>
+    </div>
+    <div>
+      <div class="sec-title"><h2>🔥 Trending</h2></div>
+      <div id="trending" class="movebox"></div>
+    </div>
+  </div>
 
   <div class="sec-title"><h2>Explore</h2></div>
   <div class="cards">
@@ -133,8 +163,79 @@ async function loadPrices(){
     meta.textContent="price feed unavailable (rate limit?) — retrying soon";
   }
 }
-loadPrices();
-setInterval(()=>{if(!document.hidden)loadPrices();},60000); // refresh every 60s
+const miniRow=c=>{
+  const ch=c.price_change_percentage_24h;const cls=ch>=0?"pos":"neg";const sign=ch>=0?"+":"";
+  return `<div class="mrow"><img src="${c.image}" alt="">
+    <span class="mn">${c.name} <small>${c.symbol}</small></span>
+    <span class="mp">${fmtPx(c.current_price)}</span>
+    <span class="${cls}">${sign}${ch==null?'–':ch.toFixed(1)+'%'}</span></div>`;
+};
+
+async function loadMovers(){
+  try{
+    const url="https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=100&page=1&price_change_percentage=24h";
+    const data=(await (await fetch(url)).json()).filter(c=>c.price_change_percentage_24h!=null);
+    const byChg=[...data].sort((a,b)=>b.price_change_percentage_24h-a.price_change_percentage_24h);
+    document.getElementById("gainers").innerHTML=byChg.slice(0,7).map(miniRow).join("");
+    document.getElementById("losers").innerHTML=byChg.slice(-7).reverse().map(miniRow).join("");
+  }catch(e){}
+}
+
+async function loadGlobal(){
+  try{
+    const d=(await (await fetch("https://api.coingecko.com/api/v3/global")).json()).data;
+    const ch=d.market_cap_change_percentage_24h_usd;const cls=ch>=0?"pos":"neg";const sign=ch>=0?"+":"";
+    const stat=(label,val)=>`<span><b style="color:var(--text)">${val}</b> ${label}</span>`;
+    document.getElementById("globalBar").innerHTML=
+      stat("total market cap",fmtUsd(d.total_market_cap.usd))+
+      stat("24h",`<span class="${cls}">${sign}${ch.toFixed(2)}%</span>`)+
+      stat("BTC dominance",d.market_cap_percentage.btc.toFixed(1)+"%")+
+      stat("ETH dominance",d.market_cap_percentage.eth.toFixed(1)+"%");
+  }catch(e){}
+}
+
+async function loadTrending(){
+  try{
+    const coins=(await (await fetch("https://api.coingecko.com/api/v3/search/trending")).json()).coins;
+    document.getElementById("trending").innerHTML=coins.slice(0,7).map(o=>{
+      const c=o.item;const p=c.data&&c.data.price;
+      return `<div class="mrow"><img src="${c.thumb}" alt="">
+        <span class="mn">${c.name} <small>${c.symbol}</small></span>
+        <span class="mp">${p!=null?fmtPx(p):('#'+(c.market_cap_rank||'–'))}</span></div>`;
+    }).join("");
+  }catch(e){}
+}
+
+let searchTimer=null;
+document.getElementById("coinSearch").addEventListener("input",e=>{
+  clearTimeout(searchTimer);const q=e.target.value.trim();
+  const box=document.getElementById("searchResults");
+  if(!q){box.innerHTML="";return;}
+  searchTimer=setTimeout(async()=>{
+    try{
+      const res=(await (await fetch("https://api.coingecko.com/api/v3/search?query="+encodeURIComponent(q))).json()).coins.slice(0,6);
+      if(!res.length){box.innerHTML="";return;}
+      const ids=res.map(c=>c.id).join(",");
+      const prices=await (await fetch("https://api.coingecko.com/api/v3/simple/price?ids="+ids+"&vs_currencies=usd&include_24hr_change=true")).json();
+      box.innerHTML=`<div class="sr">`+res.map(c=>{
+        const pr=prices[c.id];const price=pr?pr.usd:null;const ch=pr?pr.usd_24h_change:null;
+        const cls=ch>=0?"pos":"neg";const sign=ch>=0?"+":"";
+        return `<div class="mrow"><img src="${c.thumb}" alt="">
+          <span class="mn">${c.name} <small>${c.symbol}</small> ${c.market_cap_rank?'<small>#'+c.market_cap_rank+'</small>':''}</span>
+          <span class="mp">${price!=null?fmtPx(price):'–'}</span>
+          ${ch!=null?`<span class="${cls}">${sign}${ch.toFixed(1)}%</span>`:''}</div>`;
+      }).join("")+`</div>`;
+    }catch(err){box.innerHTML="";}
+  },300);
+});
+document.addEventListener("click",e=>{
+  if(!e.target.closest("#coinSearch")&&!e.target.closest("#searchResults"))
+    document.getElementById("searchResults").innerHTML="";
+});
+
+function loadAll(){loadGlobal();loadPrices();loadMovers();loadTrending();}
+loadAll();
+setInterval(()=>{if(!document.hidden)loadAll();},60000); // refresh every 60s
 </script>
 </body>
 </html>

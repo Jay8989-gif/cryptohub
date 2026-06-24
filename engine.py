@@ -6,9 +6,9 @@ Fetches the Hyperliquid leaderboard, ranks traders by PnL or ROI across
 several time windows, pulls each top trader's open positions, and aggregates
 them into "consensus trades": which coins the top traders hold in common,
 the long/short split, the size-weighted average entry price, and total
-notional exposure.
+notional exposure. Also diffs against the previous snapshot.
 
-Output: data.json  (consumed by index.html dashboard)
+Output: data.json  (consumed by the dashboard)
 
 Usage:
     python engine.py                # default: top 50, all windows/metrics
@@ -17,7 +17,6 @@ Usage:
 
 import argparse
 import json
-import time
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
@@ -152,7 +151,6 @@ def aggregate(addresses, pos_by_addr):
     out = []
     for c in coins.values():
         avg_entry = c["_entry_notional"] / c["_size_abs"] if c["_size_abs"] else 0.0
-        # net direction by notional
         long_notional = sum(t["notional"] for t in c["traders"] if t["side"] == "long")
         short_notional = sum(t["notional"] for t in c["traders"] if t["side"] == "short")
         out.append({
@@ -170,6 +168,34 @@ def aggregate(addresses, pos_by_addr):
         })
     out.sort(key=lambda x: x["holders"], reverse=True)
     return out
+
+
+def compute_changes(prev_list, new_list):
+    """Diff a cohort's previous consensus against the new one."""
+    prev = {c["coin"]: c for c in prev_list}
+    new = {c["coin"]: c for c in new_list}
+    added, dropped, shifts = [], [], []
+    for coin, n in new.items():
+        if coin not in prev:
+            added.append({"coin": coin, "holders": n["holders"], "consensus": n["consensus"]})
+            continue
+        p = prev[coin]
+        hd = n["holders"] - p["holders"]
+        flip = p["consensus"] != n["consensus"]
+        drift = ((n["avgEntry"] - p["avgEntry"]) / p["avgEntry"] * 100) if p["avgEntry"] else 0.0
+        if hd != 0 or flip:
+            shifts.append({
+                "coin": coin, "holdersDelta": hd,
+                "from": p["consensus"], "to": n["consensus"], "flip": flip,
+                "entryDriftPct": round(drift, 2),
+            })
+    for coin, p in prev.items():
+        if coin not in new:
+            dropped.append({"coin": coin, "holders": p["holders"], "consensus": p["consensus"]})
+    added.sort(key=lambda x: x["holders"], reverse=True)
+    dropped.sort(key=lambda x: x["holders"], reverse=True)
+    shifts.sort(key=lambda x: abs(x["holdersDelta"]), reverse=True)
+    return {"added": added, "dropped": dropped, "shifts": shifts}
 
 
 def main():
@@ -198,13 +224,27 @@ def main():
         addrs = [r["address"] for r in ranked]
         consensus[key] = aggregate(addrs, pos_by_addr)
 
+    # Diff against the previous snapshot (if one exists) for the "what changed" view.
+    prev_consensus, prev_at = {}, None
+    try:
+        with open(args.out) as f:
+            prev = json.load(f)
+        prev_consensus = prev.get("consensus", {})
+        prev_at = prev.get("generatedAt")
+    except (FileNotFoundError, ValueError):
+        pass
+    changes = {key: compute_changes(prev_consensus.get(key, []), consensus[key])
+               for key in consensus}
+
     out = {
         "generatedAt": datetime.now(timezone.utc).isoformat(),
+        "previousAt": prev_at,
         "topN": args.top,
         "metrics": METRICS,
         "windows": WINDOWS,
         "cohorts": cohorts,            # ranked trader lists (for live client refresh)
         "consensus": consensus,        # precomputed aggregation snapshot
+        "changes": changes,            # diff vs previous snapshot, per cohort
     }
     with open(args.out, "w") as f:
         json.dump(out, f, separators=(",", ":"))
