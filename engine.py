@@ -22,6 +22,7 @@ Usage:
 
 import argparse
 import json
+import time
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
@@ -39,14 +40,21 @@ def http_get(url, timeout=60):
         return json.load(r)
 
 
-def http_post(url, payload, timeout=30):
+def http_post(url, payload, timeout=30, tries=3):
     data = json.dumps(payload).encode()
-    req = urllib.request.Request(
-        url, data=data, headers={"Content-Type": "application/json",
-                                 "User-Agent": "hl-consensus/1.0"}
-    )
-    with urllib.request.urlopen(req, timeout=timeout) as r:
-        return json.load(r)
+    last = None
+    for i in range(tries):
+        try:
+            req = urllib.request.Request(
+                url, data=data, headers={"Content-Type": "application/json",
+                                         "User-Agent": "hl-consensus/1.0"}
+            )
+            with urllib.request.urlopen(req, timeout=timeout) as r:
+                return json.load(r)
+        except Exception as e:            # retry on rate-limit / transient errors
+            last = e
+            time.sleep(0.4 * (i + 1))
+    raise last
 
 
 def perf(row, window, metric):
@@ -103,6 +111,7 @@ def fetch_positions(address):
             "entryPx": float(p.get("entryPx", 0) or 0),
             "positionValue": float(p.get("positionValue", 0) or 0),
             "unrealizedPnl": float(p.get("unrealizedPnl", 0) or 0),
+            "returnOnEquity": float(p.get("returnOnEquity", 0) or 0),
             "leverage": (p.get("leverage") or {}).get("value"),
         })
     return address, acct, positions
@@ -117,6 +126,30 @@ def fetch_all_positions(addresses, workers=10):
             addr, acct, pos = f.result()
             result[addr] = {"accountValue": acct, "positions": pos}
     return result
+
+
+def fetch_trading_since(address):
+    """First timestamp in the account's all-time equity history = when they started."""
+    try:
+        pf = http_post(INFO_URL, {"type": "portfolio", "user": address})
+        for name, blk in pf:
+            if name == "allTime":
+                avh = blk.get("accountValueHistory", [])
+                if avh:
+                    return address, avh[0][0]
+    except Exception:
+        pass
+    return address, None
+
+
+def fetch_all_since(addresses, workers=8):
+    print(f"Fetching account age for {len(addresses)} traders...", flush=True)
+    since = {}
+    with ThreadPoolExecutor(max_workers=workers) as ex:
+        for f in as_completed({ex.submit(fetch_trading_since, a): a for a in addresses}):
+            addr, ts = f.result()
+            since[addr] = ts
+    return since
 
 
 def aggregate(addresses, pos_by_addr):
@@ -226,6 +259,22 @@ def main():
     # One position fetch per unique address (reused across cohorts).
     pos_by_addr = fetch_all_positions(sorted(all_addresses))
 
+    # Per-trader profile map (for the "Analyze trader" view): full window
+    # performances + current open positions, keyed by address.
+    since_by_addr = fetch_all_since(sorted(all_addresses))
+    row_by_addr = {r["ethAddress"]: r for r in rows}
+    traders = {}
+    for addr in all_addresses:
+        row = row_by_addr.get(addr)
+        rec = pos_by_addr.get(addr, {})
+        traders[addr] = {
+            "accountValue": rec.get("accountValue", 0.0),
+            "since": since_by_addr.get(addr),
+            "perf": {w: {"pnl": perf(row, w, "pnl"), "roi": perf(row, w, "roi"),
+                         "vlm": perf(row, w, "vlm")} for w in WINDOWS} if row else {},
+            "positions": rec.get("positions", []),
+        }
+
     # Aggregate consensus per cohort.
     consensus = {}
     for key, ranked in cohorts.items():
@@ -254,6 +303,7 @@ def main():
         "cohorts": cohorts,            # ranked trader lists (for live client refresh)
         "consensus": consensus,        # precomputed aggregation snapshot
         "changes": changes,            # diff vs previous snapshot, per cohort
+        "traders": traders,            # per-trader profiles for the Analyze view
     }
     with open(args.out, "w") as f:
         json.dump(out, f, separators=(",", ":"))

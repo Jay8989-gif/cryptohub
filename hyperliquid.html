@@ -60,6 +60,15 @@
   .spin{display:inline-block;width:13px;height:13px;border:2px solid var(--muted);
         border-top-color:transparent;border-radius:50%;animation:s .7s linear infinite;vertical-align:-2px}
   @keyframes s{to{transform:rotate(360deg)}}
+  .abtn{background:transparent;border:1px solid var(--accent);color:var(--accent);border-radius:6px;padding:3px 9px;font-size:12px;cursor:pointer}
+  .abtn:hover{background:var(--accent);color:#06221f}
+  .modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:50;align-items:flex-start;justify-content:center;padding:40px 16px;overflow:auto}
+  .modalbox{background:var(--panel);border:1px solid var(--line);border-radius:14px;max-width:640px;width:100%;padding:22px;position:relative}
+  .modalclose{position:absolute;top:10px;right:14px;background:transparent;border:0;color:var(--muted);font-size:18px;cursor:pointer}
+  .tmodal{width:100%;border-collapse:collapse;margin-top:4px}
+  .tmodal th,.tmodal td{text-align:right;padding:7px 10px;border-bottom:1px solid var(--line);font-size:13px;white-space:nowrap}
+  .tmodal th{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.4px}
+  .tmodal th:first-child,.tmodal td:first-child{text-align:left}
 </style>
 </head>
 <body>
@@ -142,7 +151,14 @@
     </thead>
     <tbody id="body"></tbody>
   </table>
-  <p class="hint">Click any row to see the individual traders behind it. "Refresh live" re-pulls every trader's current positions directly from the Hyperliquid API and re-computes the consensus in your browser.</p>
+  <p class="hint">Click any row to see the individual traders behind it, then "Analyze" any wallet for its full track record. "Refresh live" re-pulls every trader's current positions directly from the Hyperliquid API and re-computes the consensus in your browser.</p>
+</div>
+
+<div id="traderModal" class="modal" onclick="if(event.target===this)closeTrader()">
+  <div class="modalbox">
+    <button class="modalclose" onclick="closeTrader()">✕</button>
+    <div id="traderBody"></div>
+  </div>
 </div>
 
 <script>
@@ -157,6 +173,13 @@ const fmtUsd=n=>{const a=Math.abs(n);
 const fmtPx=n=>n>=1000?n.toLocaleString(undefined,{maximumFractionDigits:1}):
               n>=1?n.toFixed(3):n.toPrecision(4);
 const short=a=>a.slice(0,6)+"…"+a.slice(-4);
+const fmtSince=ms=>{
+  if(!ms)return "–";
+  const d=new Date(ms);
+  const months=Math.max(0,Math.round((Date.now()-ms)/2.63e9));
+  const dur=months>=12?`${(months/12).toFixed(1)} yr`:`${months} mo`;
+  return `${d.toLocaleString(undefined,{month:'short',year:'numeric'})} · ${dur}`;
+};
 
 async function reloadCached(){
   const rm=document.getElementById("refmeta");
@@ -178,6 +201,58 @@ async function load(){
 }
 
 function cohortKey(){return state.metric+"_"+state.window;}
+
+function openTrader(addr){
+  const t=(DATA.traders||{})[addr];
+  const m=document.getElementById("traderModal");
+  const box=document.getElementById("traderBody");
+  if(!t){box.innerHTML="No profile for this trader in the current snapshot.";m.style.display="flex";return;}
+  const av=t.accountValue||0;
+  const openNotional=(t.positions||[]).reduce((s,p)=>s+Math.abs(p.positionValue||0),0);
+  const effLev=av?openNotional/av:0;
+  const longs=(t.positions||[]).filter(p=>p.szi>0).length;
+  const shorts=(t.positions||[]).filter(p=>p.szi<0).length;
+  const vol=(t.perf&&t.perf.allTime?t.perf.allTime.vlm:0)||0;
+  const sinceTxt=fmtSince(t.since);
+  const stat=(k,v)=>`<div style="background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:9px 11px">
+     <div class="meta" style="font-size:10px">${k}</div><div style="font-weight:600;font-size:14px">${v}</div></div>`;
+  const wins=DATA.windows||["day","week","month","allTime"];
+  const lab={day:"24h",week:"7d",month:"30d",allTime:"All-time"};
+  const perfRows=wins.map(w=>{
+    const p=(t.perf||{})[w]||{};const pnl=p.pnl||0;const roi=(p.roi||0)*100;const vlm=p.vlm||0;
+    return `<tr><td>${lab[w]||w}</td>
+      <td class="${pnl>=0?'pos':'neg'}">${pnl>=0?'+':'-'}$${fmtUsd(Math.abs(pnl))}</td>
+      <td class="${roi>=0?'pos':'neg'}">${roi>=0?'+':''}${roi.toFixed(1)}%</td>
+      <td class="meta">$${fmtUsd(vlm)}</td></tr>`;}).join("");
+  const pos=(t.positions||[]).slice().sort((a,b)=>Math.abs(b.positionValue)-Math.abs(a.positionValue));
+  const posRows=pos.length?pos.map(p=>{
+    const side=p.szi>0?"long":"short";const roe=(p.returnOnEquity||0)*100;const up=p.unrealizedPnl||0;
+    return `<tr><td>${p.coin}</td><td><span class="pill ${side}">${side}</span></td>
+      <td>$${fmtPx(p.entryPx)}</td><td>$${fmtUsd(p.positionValue)}</td><td>${p.leverage??'–'}x</td>
+      <td class="${up>=0?'pos':'neg'}">${up>=0?'+':'-'}$${fmtUsd(Math.abs(up))}</td>
+      <td class="${roe>=0?'pos':'neg'}">${roe>=0?'+':''}${roe.toFixed(1)}%</td></tr>`;}).join("")
+    :`<tr><td colspan="7" class="meta">No open positions right now.</td></tr>`;
+  box.innerHTML=`
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin:0 24px 14px 0">
+      <div><div style="font-weight:600;font-size:16px">Trader ${short(addr)}</div>
+        <a href="https://hypurrscan.io/address/${addr}" target="_blank" style="color:var(--accent);font-size:13px;text-decoration:none">View on Hypurrscan ↗</a></div>
+      <div style="text-align:right"><div class="meta">Account value</div>
+        <div style="font-weight:600;font-size:18px">$${fmtUsd(t.accountValue||0)}</div></div>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px;margin-bottom:8px">
+      ${stat("Trading since",sinceTxt)}
+      ${stat("All-time volume","$"+fmtUsd(vol))}
+      ${stat("Open positions",(t.positions||[]).length+` (${longs}L/${shorts}S)`)}
+      ${stat("Effective leverage",effLev?effLev.toFixed(1)+"x":"–")}
+    </div>
+    <div style="font-weight:600;margin:8px 0 4px">Track record</div>
+    <table class="tmodal"><thead><tr><th>Window</th><th>PnL</th><th>ROI</th><th>Volume</th></tr></thead><tbody>${perfRows}</tbody></table>
+    <div style="font-weight:600;margin:16px 0 4px">Open positions (${pos.length})</div>
+    <table class="tmodal"><thead><tr><th>Coin</th><th>Side</th><th>Entry</th><th>Notional</th><th>Lev</th><th>uPnL</th><th>Return</th></tr></thead><tbody>${posRows}</tbody></table>
+    <p class="meta" style="margin-top:12px">PnL/ROI are account-wide over each window (Hyperliquid leaderboard) — a track-record signal, not the return of any single trade.</p>`;
+  m.style.display="flex";
+}
+function closeTrader(){document.getElementById("traderModal").style.display="none";}
 
 function renderChanges(){
   const el=document.getElementById("changes");
@@ -212,8 +287,11 @@ function render(){
   let rows=cohort.filter(r=>
     (state.side==="all"||r.consensus===state.side) &&
     (!q||r.coin.toUpperCase().includes(q)));
-  document.getElementById("filtermeta").textContent=
-    `showing ${rows.length} of ${cohort.length} coins`;
+  const note=(state.metric==="roi"&&cohort.length<10)
+    ? ` · high-ROI traders hold idiosyncratic positions, so consensus here is naturally sparse — try PnL or a shorter window`
+    : "";
+  document.getElementById("filtermeta").innerHTML=
+    `showing ${rows.length} of ${cohort.length} coins<span style="opacity:.8">${note}</span>`;
   rows=rows.slice();
   rows.sort((a,b)=>{
     let x=a[state.sort],y=b[state.sort];
@@ -249,14 +327,19 @@ function render(){
     if(state.open.has(r.coin)){
       const d=document.createElement("tr");d.className="detail";
       d.innerHTML=`<td colspan="7"><table><thead><tr>
-        <th>Trader</th><th>Side</th><th>Entry</th><th>Size</th><th>Notional</th><th>Lev</th></tr></thead><tbody>
-        ${r.traders.map(t=>`<tr>
+        <th>Trader</th><th>All-time ROI</th><th>Side</th><th>Entry</th><th>Size</th><th>Notional</th><th>Lev</th><th></th></tr></thead><tbody>
+        ${r.traders.map(t=>{
+          const tp=(DATA.traders||{})[t.address];
+          const roi=tp&&tp.perf&&tp.perf.allTime?tp.perf.allTime.roi:null;
+          return `<tr>
           <td class="addr"><a href="https://hypurrscan.io/address/${t.address}" target="_blank">${short(t.address)}</a></td>
+          <td class="${roi==null?'':(roi>=0?'pos':'neg')}">${roi==null?'–':(roi>=0?'+':'')+(roi*100).toFixed(1)+'%'}</td>
           <td><span class="pill ${t.side}">${t.side}</span></td>
           <td>$${fmtPx(t.entryPx)}</td>
           <td>${Math.abs(t.szi).toLocaleString(undefined,{maximumFractionDigits:4})}</td>
           <td>$${fmtUsd(t.notional)}</td>
-          <td>${t.leverage??"–"}x</td></tr>`).join("")}
+          <td>${t.leverage??"–"}x</td>
+          <td><button class="abtn" data-addr="${t.address}">Analyze</button></td></tr>`;}).join("")}
         </tbody></table></td>`;
       body.appendChild(d);
     }
@@ -361,6 +444,11 @@ document.querySelectorAll("th[data-s]").forEach(th=>th.onclick=()=>{
   if(state.sort===s)state.dir*=-1;else{state.sort=s;state.dir=-1;}
   render();});
 document.getElementById("refreshBtn").onclick=tick;
+document.getElementById("body").addEventListener("click",e=>{
+  const b=e.target.closest(".abtn");
+  if(b){e.stopPropagation();openTrader(b.dataset.addr);}
+});
+document.addEventListener("keydown",e=>{if(e.key==="Escape")closeTrader();});
 document.getElementById("search").oninput=e=>{state.q=e.target.value;render();};
 document.querySelectorAll("#sidefilter button").forEach(b=>b.onclick=()=>{
   document.querySelectorAll("#sidefilter button").forEach(x=>x.classList.remove("active"));
