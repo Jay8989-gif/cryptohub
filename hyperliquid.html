@@ -131,6 +131,7 @@
     </div>
   </div>
 
+  <div id="favorites"></div>
   <div id="changes" style="margin:0 0 18px"></div>
 
   <div class="cards" id="cards"></div>
@@ -225,6 +226,43 @@ async function load(){
 function cohortKey(){return state.metric+"_"+state.window;}
 const winLabel=w=>({day:"24h",week:"7d",month:"30d",allTime:"all-time"}[w]||w);
 
+// ---- favorites / watchlist (persisted in the browser) ----
+let favs=new Set();
+try{favs=new Set(JSON.parse(localStorage.getItem("hl_favs")||"[]"));}catch(e){}
+function saveFavs(){try{localStorage.setItem("hl_favs",JSON.stringify([...favs]));}catch(e){}}
+function toggleFav(addr){
+  favs.has(addr)?favs.delete(addr):favs.add(addr);
+  saveFavs();
+  render();
+  const m=document.getElementById("traderModal");
+  if(m&&m.style.display==="flex"&&window._openAddr===addr)openTrader(addr); // refresh modal star
+}
+function starHtml(addr){
+  const on=favs.has(addr);
+  return `<span class="favstar" data-fav-addr="${addr}" title="${on?'Remove from favorites':'Add to favorites'}"
+    style="cursor:pointer;color:${on?'#f5b301':'var(--muted)'};font-size:15px;user-select:none">${on?'★':'☆'}</span>`;
+}
+function renderFavorites(){
+  const el=document.getElementById("favorites");
+  if(!favs.size){el.innerHTML="";return;}
+  const rows=[...favs].map(addr=>{
+    const t=(DATA.traders||{})[addr];
+    const link=`<td class="addr">${starHtml(addr)} <a href="https://hypurrscan.io/address/${addr}" target="_blank">${short(addr)}</a></td>`;
+    const analyze=`<td><button class="abtn" data-addr="${addr}">Analyze</button></td>`;
+    if(!t) return `<tr>${link}<td class="meta" colspan="4">not in current snapshot</td>${analyze}</tr>`;
+    const p=(t.perf||{}).allTime||{};
+    return `<tr>${link}
+      <td>$${fmtUsd(t.accountValue||0)}</td>
+      <td class="${(p.pnl||0)>=0?'pos':'neg'}">${(p.pnl||0)>=0?'+':'-'}$${fmtUsd(Math.abs(p.pnl||0))}</td>
+      <td class="${(p.roi||0)>=0?'pos':'neg'}">${((p.roi||0)*100).toFixed(0)}%</td>
+      <td>${(t.positions||[]).length} pos</td>${analyze}</tr>`;
+  }).join("");
+  el.innerHTML=`<div style="background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin-bottom:18px">
+    <div style="font-weight:600;margin-bottom:8px">★ Favorites <span class="meta" style="font-weight:400">· ${favs.size} wallet${favs.size>1?'s':''} · all-time</span></div>
+    <div style="overflow-x:auto"><table><thead><tr><th>Trader</th><th>Account</th><th>PnL</th><th>ROI</th><th>Open</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>
+  </div>`;
+}
+
 // minimum real trading balance (perp account value) to count as a "meaningful"
 // account — filters out micro-accounts whose huge ROI comes from tiny bets.
 const MIN_TRADER_VALUE=50000;
@@ -249,7 +287,7 @@ function traderRow(r,i,wl){
   const roiW=(r.roi||0)*100;
   return `<tr>
     <td style="color:var(--muted)">${i+1}</td>
-    <td class="addr"><a href="https://hypurrscan.io/address/${r.address}" target="_blank">${short(r.address)}</a></td>
+    <td class="addr">${starHtml(r.address)} <a href="https://hypurrscan.io/address/${r.address}" target="_blank">${short(r.address)}</a></td>
     <td>$${fmtUsd(tr.accountValue||0)}</td>
     <td class="${(r.pnl||0)>=0?'pos':'neg'}">${(r.pnl||0)>=0?'+':'-'}$${fmtUsd(Math.abs(r.pnl||0))}</td>
     <td class="${roiW>=0?'pos':'neg'}">${roiW>=0?'+':''}${roiW.toFixed(1)}%</td>
@@ -285,6 +323,7 @@ function renderTopTraders(){
 }
 
 function openTrader(addr){
+  window._openAddr=addr;
   const t=(DATA.traders||{})[addr];
   const m=document.getElementById("traderModal");
   const box=document.getElementById("traderBody");
@@ -316,7 +355,7 @@ function openTrader(addr){
     :`<tr><td colspan="7" class="meta">No open positions right now.</td></tr>`;
   box.innerHTML=`
     <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin:0 24px 14px 0">
-      <div><div style="font-weight:600;font-size:16px">Trader ${short(addr)}</div>
+      <div><div style="font-weight:600;font-size:16px">${starHtml(addr)} Trader ${short(addr)}</div>
         <a href="https://hypurrscan.io/address/${addr}" target="_blank" style="color:var(--accent);font-size:13px;text-decoration:none">View on Hypurrscan ↗</a></div>
       <div style="text-align:right"><div class="meta">Account value</div>
         <div style="font-weight:600;font-size:18px">$${fmtUsd(t.accountValue||0)}</div></div>
@@ -356,6 +395,7 @@ function renderChanges(){
 }
 
 function render(){
+  renderFavorites();
   renderChanges();
   renderTopTraders();
   const cohort=(DATA.consensus[cohortKey()]||[]);
@@ -442,7 +482,7 @@ function render(){
           const tp=(DATA.traders||{})[t.address];
           const roi=tp&&tp.perf&&tp.perf.allTime?tp.perf.allTime.roi:null;
           return `<tr>
-          <td class="addr"><a href="https://hypurrscan.io/address/${t.address}" target="_blank">${short(t.address)}</a></td>
+          <td class="addr">${starHtml(t.address)} <a href="https://hypurrscan.io/address/${t.address}" target="_blank">${short(t.address)}</a></td>
           <td class="${roi==null?'':(roi>=0?'pos':'neg')}">${roi==null?'–':(roi>=0?'+':'')+(roi*100).toFixed(1)+'%'}</td>
           <td><span class="pill ${t.side}">${t.side}</span></td>
           <td>$${fmtPx(t.entryPx)}</td>
@@ -563,6 +603,10 @@ document.getElementById("topTraders").addEventListener("click",e=>{
   if(b){openTrader(b.dataset.addr);}
 });
 document.addEventListener("keydown",e=>{if(e.key==="Escape")closeTrader();});
+document.addEventListener("click",e=>{
+  const s=e.target.closest(".favstar");
+  if(s){e.stopPropagation();toggleFav(s.dataset.favAddr);}
+});
 document.getElementById("search").oninput=e=>{state.q=e.target.value;render();};
 document.querySelectorAll("#sidefilter button").forEach(b=>b.onclick=()=>{
   document.querySelectorAll("#sidefilter button").forEach(x=>x.classList.remove("active"));
