@@ -69,6 +69,16 @@
   .tmodal th,.tmodal td{text-align:right;padding:7px 10px;border-bottom:1px solid var(--line);font-size:13px;white-space:nowrap}
   .tmodal th{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.4px}
   .tmodal th:first-child,.tmodal td:first-child{text-align:left}
+  @media(max-width:640px){
+    nav{flex-wrap:wrap;gap:12px 16px;padding:12px 16px}
+    header{padding:16px}
+    h1{font-size:16px}
+    .wrap{padding:16px}
+    .controls{gap:14px}
+    th,td{padding:9px 8px;font-size:12px}
+    .card .v{font-size:18px}
+    .modalbox{padding:16px}
+  }
 </style>
 </head>
 <body>
@@ -137,10 +147,12 @@
     <span class="meta" id="filtermeta"></span>
   </div>
 
+  <div style="overflow-x:auto">
   <table id="tbl">
     <thead>
       <tr>
         <th data-s="coin">Coin</th>
+        <th data-s="_score" title="Smart-money score: how many top traders hold it × how one-sided they are × how strong their track record is. Higher = stronger conviction signal.">Score</th>
         <th data-s="holders"># Holding</th>
         <th data-s="split">Long / Short</th>
         <th data-s="consensus">Consensus</th>
@@ -152,6 +164,7 @@
     </thead>
     <tbody id="body"></tbody>
   </table>
+  </div>
   <p class="hint">Click any row to see the individual traders behind it, then "Analyze" any wallet for its full track record. "Refresh live" re-pulls every trader's current positions directly from the Hyperliquid API and re-computes the consensus in your browser.</p>
 </div>
 
@@ -167,7 +180,7 @@ const INFO_URL="https://api.hyperliquid.xyz/info";
 // ▼▼ set this to your Render backend URL after deploying (no trailing slash),
 //    e.g. "https://cryptohub-api.onrender.com". Leave "" to use the local data.json file.
 const API_BASE="";
-let DATA=null, state={metric:"pnl",window:"allTime",sort:"holders",dir:-1,open:new Set(),source:"cached",q:"",side:"all"};
+let DATA=null, state={metric:"pnl",window:"allTime",sort:"_score",dir:-1,open:new Set(),source:"cached",q:"",side:"all"};
 
 const fmtUsd=n=>{const a=Math.abs(n);
   if(a>=1e9)return (n/1e9).toFixed(2)+"B";
@@ -285,12 +298,21 @@ function render(){
 
   // average all-time ROI of each coin's holders (a "how good is this trade's crowd" signal)
   cohort.forEach(r=>{
-    if(r._avgRoi===undefined){
+    if(r._score===undefined){
       const rois=(r.traders||[]).map(t=>{
         const tp=(DATA.traders||{})[t.address];
         return tp&&tp.perf&&tp.perf.allTime?tp.perf.allTime.roi:null;
       }).filter(v=>v!=null);
       r._avgRoi=rois.length?rois.reduce((a,b)=>a+b,0)/rois.length:null;
+      // net exposure by dollars (conviction, not just headcount)
+      let ln=0,sn=0;
+      (r.traders||[]).forEach(t=>{ (t.side==='long'?(ln+=Math.abs(t.notional||0)):(sn+=Math.abs(t.notional||0))); });
+      r._longNotional=ln; r._shortNotional=sn; r._netNotional=ln-sn;
+      // smart-money score: holders × how one-sided × how good the crowd is
+      const tot=r.longs+r.shorts;
+      const agree=tot?Math.abs(r.longs-r.shorts)/tot:0;
+      const roiF=1+Math.max(0,(r._avgRoi==null?0:r._avgRoi));
+      r._score=Math.round(r.holders*(0.5+0.5*agree)*roiF);
     }
   });
 
@@ -332,9 +354,11 @@ function render(){
     tr.className="main";
     tr.innerHTML=`
       <td class="coin">${r.coin}</td>
+      <td style="font-weight:600;color:var(--accent)">${r._score??"–"}</td>
       <td>${r.holders}</td>
       <td><span class="bar"><i class="pos" style="width:${lp}%;background:var(--long)"></i><i style="width:${100-lp}%;background:var(--short)"></i></span>
-          <span class="meta"> ${r.longs}/${r.shorts}</span></td>
+          <span class="meta"> ${r.longs}/${r.shorts}</span>
+          <div class="meta" style="font-size:11px">net <span class="${r._netNotional>=0?'pos':'neg'}">${r._netNotional>=0?'+':'-'}$${fmtUsd(Math.abs(r._netNotional))}</span> ${r._netNotional>=0?'long':'short'}</div></td>
       <td><span class="pill ${r.consensus}">${r.consensus}</span></td>
       <td class="${r._avgRoi==null?'':(r._avgRoi>=0?'pos':'neg')}">${r._avgRoi==null?'–':(r._avgRoi>=0?'+':'')+(r._avgRoi*100).toFixed(0)+'%'}</td>
       <td>$${fmtPx(r.avgEntry)}</td>
@@ -344,9 +368,13 @@ function render(){
     body.appendChild(tr);
     if(state.open.has(r.coin)){
       const d=document.createElement("tr");d.className="detail";
-      d.innerHTML=`<td colspan="8"><table><thead><tr>
-        <th>Trader</th><th>All-time ROI</th><th>Side</th><th>Entry</th><th>Size</th><th>Notional</th><th>Lev</th><th></th></tr></thead><tbody>
-        ${r.traders.map(t=>{
+      d.innerHTML=`<td colspan="9"><table><thead><tr>
+        <th>Trader</th><th>All-time ROI ▾</th><th>Side</th><th>Entry</th><th>Size</th><th>Notional</th><th>Lev</th><th></th></tr></thead><tbody>
+        ${[...r.traders].sort((a,b)=>{
+          const ra=(DATA.traders||{})[a.address]?.perf?.allTime?.roi ?? -Infinity;
+          const rb=(DATA.traders||{})[b.address]?.perf?.allTime?.roi ?? -Infinity;
+          return rb-ra;
+        }).map(t=>{
           const tp=(DATA.traders||{})[t.address];
           const roi=tp&&tp.perf&&tp.perf.allTime?tp.perf.allTime.roi:null;
           return `<tr>
