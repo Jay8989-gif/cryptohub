@@ -37,6 +37,13 @@
   .note{color:var(--muted);font-size:12px;max-width:240px;white-space:normal}
   .legend{color:var(--muted);font-size:12px;margin-top:16px;line-height:1.7}
   .legend a{color:var(--accent)}
+  @media(max-width:640px){
+    nav{flex-wrap:wrap;gap:12px 16px;padding:12px 16px}
+    .wrap{padding:16px}
+    h1{font-size:20px}
+    th,td{padding:9px 8px;font-size:12px}
+    .note{max-width:none}
+  }
 </style>
 </head>
 <body>
@@ -51,6 +58,7 @@
 <div class="wrap">
   <h1>Exchange Comparison</h1>
   <p class="sub">Top global centralized exchanges · base-tier spot fees verified June 2026 · click any column to sort. Fees drop with 30-day volume and native-token discounts.</p>
+  <div style="overflow-x:auto">
   <table id="tbl">
     <thead><tr>
       <th data-k="name" data-t="s">Exchange</th>
@@ -63,6 +71,7 @@
     </tr></thead>
     <tbody id="body"></tbody>
   </table>
+  </div>
   <div class="legend">
     <strong>Notes:</strong> Maker/taker shown are standard entry-tier spot rates. Beginner "instant buy" interfaces (e.g. Coinbase Simple, Crypto.com app) carry much higher spreads than the pro/advanced rates listed here.<br>
     Sources:

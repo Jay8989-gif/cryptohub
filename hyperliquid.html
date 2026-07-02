@@ -166,6 +166,9 @@
   </table>
   </div>
   <p class="hint">Click any row to see the individual traders behind it, then "Analyze" any wallet for its full track record. "Refresh live" re-pulls every trader's current positions directly from the Hyperliquid API and re-computes the consensus in your browser.</p>
+
+  <h2 style="font-size:16px;margin:30px 0 12px">Top 10 traders <span id="topLabel" class="meta" style="font-weight:400"></span></h2>
+  <div id="topTraders" style="overflow-x:auto"></div>
 </div>
 
 <div id="traderModal" class="modal" onclick="if(event.target===this)closeTrader()">
@@ -220,6 +223,31 @@ async function load(){
 }
 
 function cohortKey(){return state.metric+"_"+state.window;}
+const winLabel=w=>({day:"24h",week:"7d",month:"30d",allTime:"all-time"}[w]||w);
+
+function renderTopTraders(){
+  const el=document.getElementById("topTraders");
+  const list=(DATA.cohorts||{})[cohortKey()]||[];
+  document.getElementById("topLabel").textContent=
+    `· ranked by ${state.metric==="pnl"?"PnL":"ROI"} · ${winLabel(state.window)}`;
+  const wl=winLabel(state.window);
+  const rows=list.slice(0,10).map((r,i)=>{
+    const tr=(DATA.traders||{})[r.address]||{};
+    const roiW=(r.roi||0)*100;
+    return `<tr>
+      <td style="color:var(--muted)">${i+1}</td>
+      <td class="addr"><a href="https://hypurrscan.io/address/${r.address}" target="_blank">${short(r.address)}</a></td>
+      <td>$${fmtUsd(r.accountValue||0)}</td>
+      <td class="${(r.pnl||0)>=0?'pos':'neg'}">${(r.pnl||0)>=0?'+':'-'}$${fmtUsd(Math.abs(r.pnl||0))}</td>
+      <td class="${roiW>=0?'pos':'neg'}">${roiW>=0?'+':''}${roiW.toFixed(1)}%</td>
+      <td class="meta">${fmtSince(tr.since)}</td>
+      <td><button class="abtn" data-addr="${r.address}">Analyze</button></td>
+    </tr>`;
+  }).join("");
+  el.innerHTML=`<table><thead><tr>
+    <th>#</th><th>Trader</th><th>Account</th><th>PnL (${wl})</th><th>ROI (${wl})</th><th>Trading since</th><th></th>
+    </tr></thead><tbody>${rows}</tbody></table>`;
+}
 
 function openTrader(addr){
   const t=(DATA.traders||{})[addr];
@@ -294,6 +322,7 @@ function renderChanges(){
 
 function render(){
   renderChanges();
+  renderTopTraders();
   const cohort=(DATA.consensus[cohortKey()]||[]);
 
   // average all-time ROI of each coin's holders (a "how good is this trade's crowd" signal)
@@ -493,6 +522,10 @@ document.getElementById("refreshBtn").onclick=tick;
 document.getElementById("body").addEventListener("click",e=>{
   const b=e.target.closest(".abtn");
   if(b){e.stopPropagation();openTrader(b.dataset.addr);}
+});
+document.getElementById("topTraders").addEventListener("click",e=>{
+  const b=e.target.closest(".abtn");
+  if(b){openTrader(b.dataset.addr);}
 });
 document.addEventListener("keydown",e=>{if(e.key==="Escape")closeTrader();});
 document.getElementById("search").oninput=e=>{state.q=e.target.value;render();};

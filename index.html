@@ -58,6 +58,14 @@
   .mrow .mp{color:var(--muted)}
   .sr{background:var(--panel);border:1px solid var(--line);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.4)}
   .sr .mrow{cursor:default}
+  @media(max-width:640px){
+    nav{flex-wrap:wrap;gap:12px 16px;padding:12px 16px}
+    .hero{padding:32px 16px 20px}
+    .hero h1{font-size:26px}
+    .wrap{padding:0 16px 32px}
+    th,td{padding:10px 8px;font-size:12px}
+    #globalBar{gap:14px}
+  }
 </style>
 </head>
 <body>
@@ -85,12 +93,14 @@
     <h2>Live market prices</h2>
     <span class="meta" id="priceMeta"><span class="spin"></span> loading…</span>
   </div>
+  <div style="overflow-x:auto">
   <table>
     <thead><tr>
       <th>#</th><th>Coin</th><th>Price</th><th>24h</th><th>Market Cap</th><th>Volume (24h)</th>
     </tr></thead>
     <tbody id="priceBody"></tbody>
   </table>
+  </div>
 
   <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px;margin-top:22px">
     <div>
