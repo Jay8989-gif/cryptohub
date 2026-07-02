@@ -1,0 +1,21 @@
+# Render blueprint — deploys the Python backend API.
+# In Render: New → Blueprint → connect this repo → it reads this file.
+services:
+  - type: web
+    name: cryptohub-api
+    runtime: python
+    plan: starter            # ~$7/mo, always-on. Use "free" to trial (sleeps when idle).
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn server:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/health
+    envVars:
+      - key: REFRESH_SECONDS
+        value: "120"          # recompute every 2 minutes
+      - key: TOP
+        value: "50"
+      - key: MIN_VALUE
+        value: "10000"
+      - key: ALLOWED_ORIGINS
+        value: "*"            # tighten to your Netlify URL once known
+      - key: REQUIRE_AUTH
+        value: "false"        # flip to "true" + set OUTSETA_DOMAIN to gate later

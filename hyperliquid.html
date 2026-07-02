@@ -163,6 +163,9 @@
 
 <script>
 const INFO_URL="https://api.hyperliquid.xyz/info";
+// ▼▼ set this to your Render backend URL after deploying (no trailing slash),
+//    e.g. "https://cryptohub-api.onrender.com". Leave "" to use the local data.json file.
+const API_BASE="";
 let DATA=null, state={metric:"pnl",window:"allTime",sort:"holders",dir:-1,open:new Set(),source:"cached",q:"",side:"all"};
 
 const fmtUsd=n=>{const a=Math.abs(n);
@@ -184,12 +187,14 @@ const fmtSince=ms=>{
 async function reloadCached(){
   const rm=document.getElementById("refmeta");
   try{
-    DATA=await (await fetch("data.json?_="+Date.now())).json();
+    const url=API_BASE ? `${API_BASE}/api/data` : ("data.json?_="+Date.now());
+    DATA=await (await fetch(url)).json();
+    const src=API_BASE?"live backend":"file";
     document.getElementById("meta").textContent=
-      `Top ${DATA.topN} traders · server snapshot ${new Date(DATA.generatedAt).toLocaleString()}`;
+      `Top ${DATA.topN} traders · ${src} snapshot ${new Date(DATA.generatedAt).toLocaleString()}`;
     rm.textContent="cached ✓";
     render();
-  }catch(e){ rm.textContent="data.json not reachable"; }
+  }catch(e){ rm.textContent=API_BASE?"backend not reachable":"data.json not reachable"; }
 }
 
 // run one refresh according to the selected source

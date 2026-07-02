@@ -237,14 +237,9 @@ def compute_changes(prev_list, new_list):
     return {"added": added, "dropped": dropped, "shifts": shifts}
 
 
-def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--top", type=int, default=50, help="cohort size (default 50)")
-    ap.add_argument("--min-value", type=float, default=10000,
-                    help="minimum current account value to be ranked (default 10000)")
-    ap.add_argument("--out", default="data.json")
-    args = ap.parse_args()
-
+def build_snapshot(top=50, min_value=10000, prev=None):
+    """Compute a full consensus snapshot dict. `prev` is the previous snapshot
+    (for the changes diff), or None. Reusable core for the CLI and the backend."""
     rows = fetch_leaderboard()
 
     # Build ranked cohorts for every metric/window combo (active accounts only).
@@ -252,15 +247,14 @@ def main():
     all_addresses = set()
     for metric in METRICS:
         for window in WINDOWS:
-            ranked = rank(rows, metric, window, args.top, args.min_value)
+            ranked = rank(rows, metric, window, top, min_value)
             cohorts[f"{metric}_{window}"] = ranked
             all_addresses.update(r["address"] for r in ranked)
 
     # One position fetch per unique address (reused across cohorts).
     pos_by_addr = fetch_all_positions(sorted(all_addresses))
 
-    # Per-trader profile map (for the "Analyze trader" view): full window
-    # performances + current open positions, keyed by address.
+    # Per-trader profile map (for the "Analyze trader" view).
     since_by_addr = fetch_all_since(sorted(all_addresses))
     row_by_addr = {r["ethAddress"]: r for r in rows}
     traders = {}
@@ -281,23 +275,17 @@ def main():
         addrs = [r["address"] for r in ranked]
         consensus[key] = aggregate(addrs, pos_by_addr)
 
-    # Diff against the previous snapshot (if one exists) for the "what changed" view.
-    prev_consensus, prev_at = {}, None
-    try:
-        with open(args.out) as f:
-            prev = json.load(f)
-        prev_consensus = prev.get("consensus", {})
-        prev_at = prev.get("generatedAt")
-    except (FileNotFoundError, ValueError):
-        pass
+    prev = prev or {}
+    prev_consensus = prev.get("consensus", {})
+    prev_at = prev.get("generatedAt")
     changes = {key: compute_changes(prev_consensus.get(key, []), consensus[key])
                for key in consensus}
 
-    out = {
+    return {
         "generatedAt": datetime.now(timezone.utc).isoformat(),
         "previousAt": prev_at,
-        "topN": args.top,
-        "minValue": args.min_value,
+        "topN": top,
+        "minValue": min_value,
         "metrics": METRICS,
         "windows": WINDOWS,
         "cohorts": cohorts,            # ranked trader lists (for live client refresh)
@@ -305,6 +293,24 @@ def main():
         "changes": changes,            # diff vs previous snapshot, per cohort
         "traders": traders,            # per-trader profiles for the Analyze view
     }
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--top", type=int, default=50, help="cohort size (default 50)")
+    ap.add_argument("--min-value", type=float, default=10000,
+                    help="minimum current account value to be ranked (default 10000)")
+    ap.add_argument("--out", default="data.json")
+    args = ap.parse_args()
+
+    prev = None
+    try:
+        with open(args.out) as f:
+            prev = json.load(f)
+    except (FileNotFoundError, ValueError):
+        pass
+
+    out = build_snapshot(top=args.top, min_value=args.min_value, prev=prev)
     with open(args.out, "w") as f:
         json.dump(out, f, separators=(",", ":"))
     print(f"Wrote {args.out} ({len(json.dumps(out))/1024:.0f} KB)", flush=True)
