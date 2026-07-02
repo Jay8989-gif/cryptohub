@@ -227,9 +227,14 @@ const winLabel=w=>({day:"24h",week:"7d",month:"30d",allTime:"all-time"}[w]||w);
 
 function renderTopTraders(){
   const el=document.getElementById("topTraders");
-  const list=(DATA.cohorts||{})[cohortKey()]||[];
+  // only traders who actually hold open positions are copyable — exclude
+  // whales/vaults/spot-only accounts that top the leaderboard with no perp book
+  const list=((DATA.cohorts||{})[cohortKey()]||[]).filter(r=>{
+    const t=(DATA.traders||{})[r.address];
+    return t && (t.positions||[]).length>0;
+  });
   document.getElementById("topLabel").textContent=
-    `· ranked by ${state.metric==="pnl"?"PnL":"ROI"} · ${winLabel(state.window)}`;
+    `· active traders ranked by ${state.metric==="pnl"?"PnL":"ROI"} · ${winLabel(state.window)}`;
   const wl=winLabel(state.window);
   const rows=list.slice(0,10).map((r,i)=>{
     const tr=(DATA.traders||{})[r.address]||{};
