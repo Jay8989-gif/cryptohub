@@ -225,11 +225,24 @@ async function load(){
 function cohortKey(){return state.metric+"_"+state.window;}
 const winLabel=w=>({day:"24h",week:"7d",month:"30d",allTime:"all-time"}[w]||w);
 
-// active = currently holds open positions AND has traded in the last ~4 weeks
-// (non-zero 30-day volume). Excludes dormant whales/vaults with no live book.
+// minimum real trading balance (perp account value) to count as a "meaningful"
+// account — filters out micro-accounts whose huge ROI comes from tiny bets.
+const MIN_TRADER_VALUE=50000;
+// A "dust-moon" turns a tiny deposit into a big % — its implied historical
+// capital (allTime pnl ÷ allTime roi) is tiny. Require that to be real too.
+function meaningfulCapital(t){
+  const a=(t.perf&&t.perf.allTime)||{};
+  if(!a.roi) return true;                 // can't compute → don't exclude
+  return Math.abs(a.pnl/a.roi)>=MIN_TRADER_VALUE;
+}
+// active & meaningful = open positions, traded in last ~4 weeks, real balance,
+// and not a dust-moon. Excludes dormant whales AND lucky micro-accounts.
 function isActive(addr){
   const t=(DATA.traders||{})[addr];
-  return !!(t && (t.positions||[]).length>0 && ((t.perf&&t.perf.month&&t.perf.month.vlm)||0)>0);
+  return !!(t && (t.positions||[]).length>0
+    && ((t.perf&&t.perf.month&&t.perf.month.vlm)||0)>0
+    && (t.accountValue||0)>=MIN_TRADER_VALUE
+    && meaningfulCapital(t));
 }
 function traderRow(r,i,wl){
   const tr=(DATA.traders||{})[r.address]||{};
@@ -237,18 +250,17 @@ function traderRow(r,i,wl){
   return `<tr>
     <td style="color:var(--muted)">${i+1}</td>
     <td class="addr"><a href="https://hypurrscan.io/address/${r.address}" target="_blank">${short(r.address)}</a></td>
-    <td>$${fmtUsd(r.accountValue||0)}</td>
+    <td>$${fmtUsd(tr.accountValue||0)}</td>
     <td class="${(r.pnl||0)>=0?'pos':'neg'}">${(r.pnl||0)>=0?'+':'-'}$${fmtUsd(Math.abs(r.pnl||0))}</td>
     <td class="${roiW>=0?'pos':'neg'}">${roiW>=0?'+':''}${roiW.toFixed(1)}%</td>
     <td class="meta">${fmtSince(tr.since)}</td>
     <td><button class="abtn" data-addr="${r.address}">Analyze</button></td>
   </tr>`;
 }
-function traderTable(title,cohortKeyName,wl){
-  const list=((DATA.cohorts||{})[cohortKeyName]||[]).filter(r=>isActive(r.address)).slice(0,10);
+function traderTable(title,list,wl){
   const rows=list.length
     ? list.map((r,i)=>traderRow(r,i,wl)).join("")
-    : `<tr><td colspan="7" class="meta">No active traders in this window.</td></tr>`;
+    : `<tr><td colspan="7" class="meta">No qualifying traders in this window.</td></tr>`;
   return `<div>
     <div style="font-weight:600;margin-bottom:8px">${title}</div>
     <div style="overflow-x:auto"><table><thead><tr>
@@ -257,12 +269,19 @@ function traderTable(title,cohortKeyName,wl){
   </div>`;
 }
 function renderTopTraders(){
-  const wl=winLabel(state.window);
+  const wl=winLabel(state.window), w=state.window;
   document.getElementById("topLabel").textContent=
-    `· traded in last 30 days, holding positions · ${wl}`;
+    `· active, ≥$50k balance, traded last 30d · ${wl}`;
+  // pool of meaningful active traders, ranked for the selected window
+  const pool=Object.keys(DATA.traders||{}).filter(isActive).map(addr=>{
+    const t=DATA.traders[addr], p=(t.perf||{})[w]||{};
+    return {address:addr, accountValue:t.accountValue, pnl:p.pnl||0, roi:p.roi||0, since:t.since};
+  });
+  const byPnl=[...pool].sort((a,b)=>b.pnl-a.pnl).slice(0,10);
+  const byRoi=[...pool].sort((a,b)=>b.roi-a.roi).slice(0,10);
   document.getElementById("topTraders").innerHTML=
-    traderTable(`Top 10 by PnL (${wl})`,`pnl_${state.window}`,wl)+
-    traderTable(`Top 10 by ROI (${wl})`,`roi_${state.window}`,wl);
+    traderTable(`Top 10 by PnL (${wl})`,byPnl,wl)+
+    traderTable(`Top 10 by ROI (${wl})`,byRoi,wl);
 }
 
 function openTrader(addr){
