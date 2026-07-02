@@ -79,6 +79,10 @@
     .card .v{font-size:18px}
     .modalbox{padding:16px}
   }
+  .subtabs{display:flex;gap:6px;margin-bottom:18px;border-bottom:1px solid var(--line)}
+  .subtabs button{background:transparent;border:0;border-bottom:2px solid transparent;color:var(--muted);padding:9px 16px;cursor:pointer;font-size:14px}
+  .subtabs button.active{color:var(--text);border-bottom-color:var(--accent);font-weight:600}
+  .tfsel{padding:7px 10px;color:var(--text);background:var(--panel2);border:1px solid var(--line);border-radius:8px;font-size:13px}
 </style>
 </head>
 <body>
@@ -95,6 +99,11 @@
 </header>
 
 <div class="wrap">
+  <div class="subtabs" id="subtabs">
+    <button data-view="market" class="active">Market</button>
+    <button data-view="favorites">★ Favorites</button>
+  </div>
+  <div id="marketView">
   <div class="controls">
     <div class="ctl">
       <label>Rank traders by</label>
@@ -131,7 +140,6 @@
     </div>
   </div>
 
-  <div id="favorites"></div>
   <div id="changes" style="margin:0 0 18px"></div>
 
   <div class="cards" id="cards"></div>
@@ -168,8 +176,33 @@
   </div>
   <p class="hint">Click any row to see the individual traders behind it, then "Analyze" any wallet for its full track record. "Refresh live" re-pulls every trader's current positions directly from the Hyperliquid API and re-computes the consensus in your browser.</p>
 
-  <h2 style="font-size:16px;margin:30px 0 12px">Top 10 active traders <span id="topLabel" class="meta" style="font-weight:400"></span></h2>
+  <h2 style="font-size:16px;margin:30px 0 10px">Top 10 active traders <span id="topLabel" class="meta" style="font-weight:400"></span></h2>
+  <div id="traderFilters" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:0 0 14px">
+    <span class="meta">Filters:</span>
+    <select id="fBal" class="tfsel">
+      <option value="50000">Balance ≥ $50k</option>
+      <option value="250000">Balance ≥ $250k</option>
+      <option value="1000000">Balance ≥ $1M</option>
+      <option value="5000000">Balance ≥ $5M</option>
+    </select>
+    <select id="fDir" class="tfsel">
+      <option value="any">Any direction</option>
+      <option value="long">Net long</option>
+      <option value="short">Net short</option>
+    </select>
+    <select id="fAge" class="tfsel">
+      <option value="0">Any age</option>
+      <option value="3">Trading 3mo+</option>
+      <option value="12">Trading 1yr+</option>
+    </select>
+  </div>
   <div id="topTraders" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(440px,1fr));gap:20px"></div>
+  </div>
+
+  <div id="favView" style="display:none">
+    <h2 style="font-size:16px;margin:6px 0 12px">★ Your favorite wallets</h2>
+    <div id="favorites"></div>
+  </div>
 </div>
 
 <div id="traderModal" class="modal" onclick="if(event.target===this)closeTrader()">
@@ -184,7 +217,7 @@ const INFO_URL="https://api.hyperliquid.xyz/info";
 // ▼▼ set this to your Render backend URL after deploying (no trailing slash),
 //    e.g. "https://cryptohub-api.onrender.com". Leave "" to use the local data.json file.
 const API_BASE="";
-let DATA=null, state={metric:"pnl",window:"allTime",sort:"_score",dir:-1,open:new Set(),source:"cached",q:"",side:"all"};
+let DATA=null, state={metric:"pnl",window:"allTime",sort:"_score",dir:-1,open:new Set(),source:"cached",q:"",side:"all",view:"market",tf:{minBal:50000,dir:"any",minAge:0}};
 
 const fmtUsd=n=>{const a=Math.abs(n);
   if(a>=1e9)return (n/1e9).toFixed(2)+"B";
@@ -244,7 +277,7 @@ function starHtml(addr){
 }
 function renderFavorites(){
   const el=document.getElementById("favorites");
-  if(!favs.size){el.innerHTML="";return;}
+  if(!favs.size){el.innerHTML='<p class="hint">Star any wallet (☆) in the Market tab to add it to your watchlist.</p>';return;}
   const rows=[...favs].map(addr=>{
     const t=(DATA.traders||{})[addr];
     const link=`<td class="addr">${starHtml(addr)} <a href="https://hypurrscan.io/address/${addr}" target="_blank">${short(addr)}</a></td>`;
@@ -262,6 +295,16 @@ function renderFavorites(){
     <div style="overflow-x:auto"><table><thead><tr><th>Trader</th><th>Account</th><th>PnL</th><th>ROI</th><th>Open</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>
   </div>`;
 }
+
+function setView(v){
+  state.view=v;
+  document.getElementById("marketView").style.display=(v==="market")?"":"none";
+  document.getElementById("favView").style.display=(v==="favorites")?"":"none";
+  document.querySelectorAll("#subtabs button").forEach(b=>b.classList.toggle("active",b.dataset.view===v));
+  render();
+}
+// net directional exposure of a trader by $ notional (+long / -short)
+function traderNet(t){let n=0;(t.positions||[]).forEach(p=>{n+=(p.szi>0?1:-1)*Math.abs(p.positionValue||0);});return n;}
 
 // minimum real trading balance (perp account value) to count as a "meaningful"
 // account — filters out micro-accounts whose huge ROI comes from tiny bets.
@@ -311,7 +354,14 @@ function renderTopTraders(){
   document.getElementById("topLabel").textContent=
     `· active, ≥$50k balance, traded last 30d · ${wl}`;
   // pool of meaningful active traders, ranked for the selected window
-  const pool=Object.keys(DATA.traders||{}).filter(isActive).map(addr=>{
+  const tf=state.tf;
+  const pool=Object.keys(DATA.traders||{}).filter(isActive).filter(addr=>{
+    const t=DATA.traders[addr];
+    if((t.accountValue||0)<tf.minBal) return false;
+    if(tf.dir!=="any"){const n=traderNet(t); if(tf.dir==="long"&&n<=0)return false; if(tf.dir==="short"&&n>=0)return false;}
+    if(tf.minAge>0){ if(!t.since)return false; if((Date.now()-t.since)/2.63e9<tf.minAge)return false; }
+    return true;
+  }).map(addr=>{
     const t=DATA.traders[addr], p=(t.perf||{})[w]||{};
     return {address:addr, accountValue:t.accountValue, pnl:p.pnl||0, roi:p.roi||0, since:t.since};
   });
@@ -611,6 +661,10 @@ document.getElementById("search").oninput=e=>{state.q=e.target.value;render();};
 document.querySelectorAll("#sidefilter button").forEach(b=>b.onclick=()=>{
   document.querySelectorAll("#sidefilter button").forEach(x=>x.classList.remove("active"));
   b.classList.add("active");state.side=b.dataset.v;render();});
+document.querySelectorAll("#subtabs button").forEach(b=>b.onclick=()=>setView(b.dataset.view));
+document.getElementById("fBal").onchange=e=>{state.tf.minBal=+e.target.value;render();};
+document.getElementById("fDir").onchange=e=>{state.tf.dir=e.target.value;render();};
+document.getElementById("fAge").onchange=e=>{state.tf.minAge=+e.target.value;render();};
 
 load();
 </script>
