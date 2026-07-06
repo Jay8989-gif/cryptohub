@@ -117,8 +117,8 @@
       <div class="seg" id="window">
         <button data-v="day">Day</button>
         <button data-v="week">Week</button>
-        <button data-v="month">Month</button>
-        <button data-v="allTime" class="active">All-time</button>
+        <button data-v="month" class="active">Month</button>
+        <button data-v="allTime">All-time</button>
       </div>
     </div>
     <div class="refresh">
@@ -195,6 +195,9 @@
       <option value="3">Trading 3mo+</option>
       <option value="12">Trading 1yr+</option>
     </select>
+    <label class="meta" style="display:flex;align-items:center;gap:6px;cursor:pointer">
+      <input type="checkbox" id="fFav"> <span style="color:#f5b301">★</span> favorites only
+    </label>
   </div>
   <div id="topTraders" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(440px,1fr));gap:20px"></div>
   </div>
@@ -217,7 +220,7 @@ const INFO_URL="https://api.hyperliquid.xyz/info";
 // ▼▼ set this to your Render backend URL after deploying (no trailing slash),
 //    e.g. "https://cryptohub-api.onrender.com". Leave "" to use the local data.json file.
 const API_BASE="";
-let DATA=null, state={metric:"pnl",window:"allTime",sort:"_score",dir:-1,open:new Set(),source:"cached",q:"",side:"all",view:"market",tf:{minBal:50000,dir:"any",minAge:0}};
+let DATA=null, state={metric:"pnl",window:"month",sort:"_score",dir:-1,open:new Set(),source:"cached",q:"",side:"all",view:"market",favOnly:false,tf:{minBal:50000,dir:"any",minAge:0}};
 
 const fmtUsd=n=>{const a=Math.abs(n);
   if(a>=1e9)return (n/1e9).toFixed(2)+"B";
@@ -279,21 +282,42 @@ function renderFavorites(){
   const el=document.getElementById("favorites");
   if(!favs.size){el.innerHTML='<p class="hint">Star any wallet (☆) in the Market tab to add it to your watchlist.</p>';return;}
   const rows=[...favs].map(addr=>{
-    const t=(DATA.traders||{})[addr];
+    const L=favLive[addr];
     const link=`<td class="addr">${starHtml(addr)} <a href="https://hypurrscan.io/address/${addr}" target="_blank">${short(addr)}</a></td>`;
     const analyze=`<td><button class="abtn" data-addr="${addr}">Analyze</button></td>`;
-    if(!t) return `<tr>${link}<td class="meta" colspan="4">not in current snapshot</td>${analyze}</tr>`;
-    const p=(t.perf||{}).allTime||{};
+    if(!L) return `<tr>${link}<td class="meta" colspan="3">fetching live…</td>${analyze}</tr>`;
+    const netU=L.positions.reduce((s,p)=>s+(p.unrealizedPnl||0),0);
+    const longs=L.positions.filter(p=>p.szi>0).length, shorts=L.positions.length-longs;
     return `<tr>${link}
-      <td>$${fmtUsd(t.accountValue||0)}</td>
-      <td class="${(p.pnl||0)>=0?'pos':'neg'}">${(p.pnl||0)>=0?'+':'-'}$${fmtUsd(Math.abs(p.pnl||0))}</td>
-      <td class="${(p.roi||0)>=0?'pos':'neg'}">${((p.roi||0)*100).toFixed(0)}%</td>
-      <td>${(t.positions||[]).length} pos</td>${analyze}</tr>`;
+      <td>$${fmtUsd(L.accountValue||0)}</td>
+      <td class="${netU>=0?'pos':'neg'}">${netU>=0?'+':'-'}$${fmtUsd(Math.abs(netU))}</td>
+      <td>${L.positions.length} <span class="meta">(${longs}L/${shorts}S)</span></td>${analyze}</tr>`;
   }).join("");
   el.innerHTML=`<div style="background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin-bottom:18px">
-    <div style="font-weight:600;margin-bottom:8px">★ Favorites <span class="meta" style="font-weight:400">· ${favs.size} wallet${favs.size>1?'s':''} · all-time</span></div>
-    <div style="overflow-x:auto"><table><thead><tr><th>Trader</th><th>Account</th><th>PnL</th><th>ROI</th><th>Open</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>
+    <div style="font-weight:600;margin-bottom:8px">★ Favorites <span class="meta" style="font-weight:400">· ${favs.size} wallet${favs.size>1?'s':''} · live positions</span></div>
+    <div style="overflow-x:auto"><table><thead><tr><th>Trader</th><th>Account</th><th>Net uPnL (live)</th><th>Open</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>
   </div>`;
+}
+// pull each favorited wallet's CURRENT positions straight from Hyperliquid,
+// so the watchlist is always live even for wallets not in the ranked snapshot.
+let favLive={};
+async function refreshFavoritesLive(){
+  await Promise.all([...favs].map(async addr=>{
+    try{
+      const d=await (await fetch(INFO_URL,{method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({type:"clearinghouseState",user:addr})})).json();
+      favLive[addr]={
+        accountValue:parseFloat((d.marginSummary||{}).accountValue||0),
+        positions:(d.assetPositions||[]).map(a=>a.position).filter(p=>parseFloat(p.szi)!==0).map(p=>({
+          coin:p.coin,szi:parseFloat(p.szi),entryPx:parseFloat(p.entryPx),positionValue:parseFloat(p.positionValue),
+          unrealizedPnl:parseFloat(p.unrealizedPnl),returnOnEquity:parseFloat(p.returnOnEquity),leverage:(p.leverage||{}).value})),
+        fetchedAt:Date.now()
+      };
+    }catch(e){}
+  }));
+  renderFavorites();
+  const m=document.getElementById("traderModal");
+  if(m&&m.style.display==="flex"&&favs.has(window._openAddr))openTrader(window._openAddr); // refresh open modal with live data
 }
 
 function setView(v){
@@ -302,6 +326,7 @@ function setView(v){
   document.getElementById("favView").style.display=(v==="favorites")?"":"none";
   document.querySelectorAll("#subtabs button").forEach(b=>b.classList.toggle("active",b.dataset.view===v));
   render();
+  if(v==="favorites"&&favs.size)refreshFavoritesLive();
 }
 // net directional exposure of a trader by $ notional (+long / -short)
 function traderNet(t){let n=0;(t.positions||[]).forEach(p=>{n+=(p.szi>0?1:-1)*Math.abs(p.positionValue||0);});return n;}
@@ -357,6 +382,7 @@ function renderTopTraders(){
   const tf=state.tf;
   const pool=Object.keys(DATA.traders||{}).filter(isActive).filter(addr=>{
     const t=DATA.traders[addr];
+    if(state.favOnly && !favs.has(addr)) return false;
     if((t.accountValue||0)<tf.minBal) return false;
     if(tf.dir!=="any"){const n=traderNet(t); if(tf.dir==="long"&&n<=0)return false; if(tf.dir==="short"&&n>=0)return false;}
     if(tf.minAge>0){ if(!t.since)return false; if((Date.now()-t.since)/2.63e9<tf.minAge)return false; }
@@ -374,10 +400,14 @@ function renderTopTraders(){
 
 function openTrader(addr){
   window._openAddr=addr;
-  const t=(DATA.traders||{})[addr];
+  const base=(DATA.traders||{})[addr]||{};
+  const L=favLive[addr];
   const m=document.getElementById("traderModal");
   const box=document.getElementById("traderBody");
-  if(!t){box.innerHTML="No profile for this trader in the current snapshot.";m.style.display="flex";return;}
+  if(!base.perf && !L){box.innerHTML="Fetching live data…";m.style.display="flex";if(favs.has(addr))refreshFavoritesLive();return;}
+  // merge: live positions/balance when we have them, snapshot track record otherwise
+  const t=Object.assign({},base,L?{accountValue:L.accountValue,positions:L.positions}:{});
+  const isLive=!!L;
   const av=t.accountValue||0;
   const openNotional=(t.positions||[]).reduce((s,p)=>s+Math.abs(p.positionValue||0),0);
   const effLev=av?openNotional/av:0;
@@ -389,12 +419,14 @@ function openTrader(addr){
      <div class="meta" style="font-size:10px">${k}</div><div style="font-weight:600;font-size:14px">${v}</div></div>`;
   const wins=DATA.windows||["day","week","month","allTime"];
   const lab={day:"24h",week:"7d",month:"30d",allTime:"All-time"};
-  const perfRows=wins.map(w=>{
+  const hasPerf=t.perf&&(t.perf.allTime||t.perf.month||t.perf.week||t.perf.day);
+  const perfRows=hasPerf?wins.map(w=>{
     const p=(t.perf||{})[w]||{};const pnl=p.pnl||0;const roi=(p.roi||0)*100;const vlm=p.vlm||0;
     return `<tr><td>${lab[w]||w}</td>
       <td class="${pnl>=0?'pos':'neg'}">${pnl>=0?'+':'-'}$${fmtUsd(Math.abs(pnl))}</td>
       <td class="${roi>=0?'pos':'neg'}">${roi>=0?'+':''}${roi.toFixed(1)}%</td>
-      <td class="meta">$${fmtUsd(vlm)}</td></tr>`;}).join("");
+      <td class="meta">$${fmtUsd(vlm)}</td></tr>`;}).join("")
+    :`<tr><td colspan="4" class="meta">Not in the ranked set — windowed track record unavailable. Positions below are live.</td></tr>`;
   const pos=(t.positions||[]).slice().sort((a,b)=>Math.abs(b.positionValue)-Math.abs(a.positionValue));
   const posRows=pos.length?pos.map(p=>{
     const side=p.szi>0?"long":"short";const roe=(p.returnOnEquity||0)*100;const up=p.unrealizedPnl||0;
@@ -665,6 +697,7 @@ document.querySelectorAll("#subtabs button").forEach(b=>b.onclick=()=>setView(b.
 document.getElementById("fBal").onchange=e=>{state.tf.minBal=+e.target.value;render();};
 document.getElementById("fDir").onchange=e=>{state.tf.dir=e.target.value;render();};
 document.getElementById("fAge").onchange=e=>{state.tf.minAge=+e.target.value;render();};
+document.getElementById("fFav").onchange=e=>{state.favOnly=e.target.checked;render();};
 
 load();
 </script>
